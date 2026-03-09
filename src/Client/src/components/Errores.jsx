@@ -1,4 +1,4 @@
-export default function Errores({ data }) {
+export default function Errores({ texto }) {
     return (
       <div className="seccion">
         <h3>Errores</h3>

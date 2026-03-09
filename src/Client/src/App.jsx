@@ -13,7 +13,7 @@ export default function App() {
   const [astDot, setAstDot] = useState("");
   const [code, setCode] = useState("");
   const [consola, setConsola] = useState("");
-  const [errores, setErrores] = useState([]);
+  const [errores, setErrores] = useState("");
   const [simbolos, setSimbolos] = useState([]);
 
 
@@ -84,15 +84,14 @@ const handleSave = () => {
     setConsola("Ejecutando...");
     try {
       //const res = await axios.post("http://localhost:5000/interpretar", { code });
-       const response = await fetch('http://localhost:5000/interpretar', {
+       const response = await fetch('http://localhost:8000/index.php', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ codigo: code }),
+        body: JSON.stringify({ expression : code }),
       })
-      const p = JSON.stringify({ codigo: code });
-      console.log(p);
+      const p = JSON.stringify({ expression : code });
 
       const data = await response.json()
       const now = new Date();
@@ -101,29 +100,41 @@ const handleSave = () => {
         minute: '2-digit', 
         second: '2-digit' 
     });
-
-      if (data.exito){
+    console.log(data)
+      if (data.success){
+        const lineas = data.output
+        .split("\n")
+        .filter(line => line.trim() !== "");
       const newOutput = [
       //...consola, 
       `[${timeStamp}]--- RESULTADO DEL ANÁLISIS ---`
-      ]
-      if (data.salida && data.salida.length > 0) {
-        data.salida.forEach(linea => {
-        newOutput.push(`  ${linea}`)
-      })
-    }
+      ];
+
+      lineas.forEach(linea => {
+        newOutput.push(`  ${linea}`);
+      });
     
-      const textoConsola = newOutput.join('\n'); 
-      setConsola(textoConsola);
-      //setConsola(prevConsola => prevConsola + textoConsola);
-    
+      setConsola(newOutput.join("\n"));
       
         //setSimbolos(data.simbolos);
         setAstDot(data.ast);
+      } else{
+        const lineas = data.output
+        .split("\n")
+        .filter(line => line.trim() !== "");
+        const newOutput = [
+      //...consola, 
+      `[${timeStamp}]--- ERRORES DURANTE EL ANÁLISIS ---`
+      ];
+        lineas.forEach(linea => {
+        newOutput.push(`  ${linea}`);
+      });
+    
+      setErrores(newOutput.join("\n"));
       }
 
     } catch (error) {
-      setConsola("Error al interpretar.");
+      setErrores("Error al interpretar.");
     }
   };
 
