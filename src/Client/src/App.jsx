@@ -22,6 +22,7 @@ export default function App() {
   const handleLoadFile = (event) => {
     const file = event.target.files[0];
     if (file) {
+
       window.sessionStorage.setItem('fileName', file.name);
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -34,8 +35,10 @@ export default function App() {
 const handleSave = () => {
     const content = code; 
 
-    const fileName = window.sessionStorage.getItem('fileName') || 'Codigo.code';
-
+    let fileName = window.sessionStorage.getItem('fileName') || 'Codigo.go';
+    if (!fileName.toLowerCase().endsWith('.go')) {
+    fileName += '.go';
+    }
     const blob = new Blob([content], { type: 'text/plain' });
 
     const url = URL.createObjectURL(blob);
@@ -136,10 +139,12 @@ const handleSave = () => {
         onSave={handleSave}
       />
     </div>
+    <div className="contenedor-Titulo">
       <div className="Titulo">
-      <h2>GOLAMPI</h2>
+      <img src="go.png" alt="" className="logo-inline"/>
+      <span>LAMPI</span>
       </div>
-      
+      </div>
       <div className="seccion" id = "Editor">
         <Editor code={code} setCode={setCode} />
       </div>
