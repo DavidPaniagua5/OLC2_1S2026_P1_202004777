@@ -2,7 +2,6 @@
 
 namespace App;
 
-// ---- Contextos ANTLR generados (nombres según Grammar.g4) ----
 
 // Programa y funciones
 use Context\ProgramaContext;
@@ -56,6 +55,7 @@ use Context\LiteralStringContext;
 
 // Entorno
 use App\Env\{Environment, Symbol, Result, TiposSistema, ManejadorErrores};
+use App\ErrorListener;
 
 class Interpreter extends \GrammarBaseVisitor
 {
@@ -82,11 +82,16 @@ class Interpreter extends \GrammarBaseVisitor
     // Nombre del ámbito activo (función o 'global')
     private string $ambitoActual = 'global';
 
-    public function __construct()
+    /**
+     * @param ManejadorErrores|null $errores  Si se pasa uno externo (compartido con
+     *                                         el lexer/parser), los errores semánticos
+     *                                         se agregan al mismo objeto.
+     */
+    public function __construct(?ManejadorErrores $errores = null)
     {
-        $this->errores    = new ManejadorErrores();
-        $this->envGlobal  = new Environment();
-        $this->env        = $this->envGlobal;
+        $this->errores   = $errores ?? new ManejadorErrores();
+        $this->envGlobal = new Environment();
+        $this->env       = $this->envGlobal;
     }
 
     // ==============================================================
@@ -917,7 +922,7 @@ class Interpreter extends \GrammarBaseVisitor
         if ($r == 0) {
             throw new \RuntimeException('División por cero.');
         }
-        // División entera si el resultado es int32
+        // División entera si el resultado es int32 (igual que Go)
         if ($tipoRes === Result::INT32) {
             return intdiv((int)$l, (int)$r);
         }
@@ -954,6 +959,14 @@ class Interpreter extends \GrammarBaseVisitor
         };
     }
 
+    /**
+     * Convierte un Result a su representación en texto para fmt.Println.
+     * Replica el comportamiento de Go:
+     *   - bool   → "true" / "false"
+     *   - nil    → "<nil>"
+     *   - float  → representación sin ceros innecesarios
+     *   - rune   → número (igual que Go, que imprime el codepoint)
+     */
     private function aTexto(Result $res): string
     {
         return match ($res->tipo) {

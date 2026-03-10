@@ -79,8 +79,6 @@ const handleSave = () => {
       return
     }
 
-    
-
     setConsola("Ejecutando...");
     try {
         const response = await fetch('http://localhost:8000/index.php', {
@@ -99,8 +97,8 @@ const handleSave = () => {
         minute: '2-digit', 
         second: '2-digit' 
     });
-    console.log(data)
-      if (data.success){
+    console.log(data);
+      if (data.errores){
         const lineas = data.output
         .split("\n")
         .filter(line => line.trim() !== "");
@@ -119,10 +117,15 @@ const handleSave = () => {
         setAstDot(data.svg);
       }
       else{
+        setErrores([]);
+        setSimbolos([]);
+        setAstDot("");
+
+        setConsola(`[${timeStamp}]--- RESULTADO DEL ANÁLISIS --- \n Errores detactados, ver apartado de errores.`);
         setErrores(data.errors);
       }
     } catch (error) {
-      setErrores("Error al interpretar.");
+      setConsola("Error al interpretar.");
     }
   };
 

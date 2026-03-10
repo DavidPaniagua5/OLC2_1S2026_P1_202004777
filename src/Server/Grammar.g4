@@ -161,7 +161,7 @@ listaExpr
     ;
 
 // ============================================================
-// EXPRESIONES  (precedencia de menor a mayor, de arriba a abajo)
+// EXPRESIONES
 // ============================================================
 expr
     // OR  (menor precedencia)
@@ -225,7 +225,7 @@ tipo
     ;
 
 // ============================================================
-// PALABRAS RESERVADAS  (deben ir antes que ID)
+// PALABRAS RESERVADAS
 // ============================================================
 FUNC     : 'func'     ;
 VAR      : 'var'      ;

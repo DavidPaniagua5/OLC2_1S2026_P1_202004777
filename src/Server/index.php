@@ -3,12 +3,12 @@ require __DIR__ . '/vendor/autoload.php';
 
 use Antlr\Antlr4\Runtime\InputStream;
 use Antlr\Antlr4\Runtime\CommonTokenStream;
-use Antlr\Antlr4\Runtime\Error\BailErrorStrategy;
-use Antlr\Antlr4\Runtime\Error\Exceptions\ParseCancellationException;
-use Antlr\Antlr4\Runtime\Error\Exceptions\InputMismatchException;
+use Antlr\Antlr4\Runtime\Error\DefaultErrorStrategy;
 
 use App\Interpreter;
 use App\GeneradorDot;
+use App\ErrorListener;
+use App\Env\ManejadorErrores;
 
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type');
@@ -37,58 +37,59 @@ try {
         exit;
     }
 
+    // ── Manejador de errores compartido entre lexer, parser e intérprete ──
+    $errores = new ManejadorErrores();
+
+    // ── ANÁLISIS LÉXICO ───────────────────────────────────────────────────
     $inputStream = InputStream::fromString($input);
     $lexer       = new GrammarLexer($inputStream);
-    $tokens      = new CommonTokenStream($lexer);
-    $parser      = new GrammarParser($tokens);
-    $parser->setErrorHandler(new BailErrorStrategy());
-    $tree        = $parser->programa();
 
-    // SVG se genera del árbol sintáctico ANTES de interpretar (Graphviz en servidor)
-    $respuesta['svg'] = GeneradorDot::generarSVG($tree, $parser);
+    // Quitar el listener de consola por defecto de ANTLR y poner el nuestro
+    $lexer->removeErrorListeners();
+    $lexer->addErrorListener(new ErrorListener($errores, 'Léxico'));
 
-    $interprete = new Interpreter();
-    $salida     = $interprete->visit($tree);
+    // ── ANÁLISIS SINTÁCTICO ───────────────────────────────────────────────
+    $tokens = new CommonTokenStream($lexer);
+    $parser = new GrammarParser($tokens);
 
-    $respuesta['success']  = true;
-    $respuesta['output']   = $salida;
-    $respuesta['simbolos'] = $interprete->tablaSimbolos();
-    $respuesta['errors']   = $interprete->errores->comoArreglo();
+    // DefaultErrorStrategy: intenta recuperarse y continuar (reporta todos los errores)
+    $parser->setErrorHandler(new DefaultErrorStrategy());
+    $parser->removeErrorListeners();
+    $parser->addErrorListener(new ErrorListener($errores, 'Sintáctico'));
 
-    echo json_encode($respuesta);
+    $tree = $parser->programa();
 
-} catch (ParseCancellationException $e) {
-    $causa = $e->getPrevious();
-    if ($causa instanceof InputMismatchException) {
-        $token = $causa->getOffendingToken();
-        $vocab = $causa->getRecognizer()->getVocabulary();
-        $esperados = array_map(
-            fn($t) => $vocab->getDisplayName($t),
-            $causa->getExpectedTokens()->toArray()
-        );
-        $respuesta['errors'][] = [
-            'numero'      => 1,
-            'tipo'        => 'Sintáctico',
-            'descripcion' => sprintf(
-                "Se esperaba %s pero se encontró '%s'",
-                implode(' o ', $esperados),
-                $token?->getText() ?? 'EOF'
-            ),
-            'linea'   => $token?->getLine() ?? 0,
-            'columna' => $token?->getCharPositionInLine() ?? 0,
-        ];
-    } else {
-        $respuesta['errors'][] = [
-            'numero' => 1, 'tipo' => 'Sintáctico',
-            'descripcion' => $e->getMessage(), 'linea' => 0, 'columna' => 0,
-        ];
+    // ── Generar SVG del AST (siempre, aunque haya errores sintácticos) ────
+    try {
+        $respuesta['svg'] = GeneradorDot::generarSVG($tree, $parser);
+    } catch (\Throwable $e) {
+        // El AST puede estar incompleto si hay errores — no es fatal
+        $respuesta['svg'] = '';
     }
+
+    // ── EJECUCIÓN (solo si no hay errores sintácticos ni léxicos) ─────────
+    if (!$errores->tieneErrores()) {
+        $interprete = new Interpreter($errores);   // comparte el mismo manejador
+        $salida     = $interprete->visit($tree);
+
+        $respuesta['success']  = true;
+        $respuesta['output']   = $salida;
+        $respuesta['simbolos'] = $interprete->tablaSimbolos();
+    } else {
+        // Hay errores de análisis — devolver el árbol parcial pero no ejecutar
+        $respuesta['success'] = false;
+    }
+
+    $respuesta['errors'] = $errores->comoArreglo();
     echo json_encode($respuesta);
 
-} catch (\Exception $e) {
+} catch (\Throwable $e) {
     $respuesta['errors'][] = [
-        'numero' => 1, 'tipo' => 'Error interno',
-        'descripcion' => $e->getMessage(), 'linea' => 0, 'columna' => 0,
+        'numero'      => 1,
+        'tipo'        => 'Error interno',
+        'descripcion' => $e->getMessage(),
+        'linea'       => 0,
+        'columna'     => 0,
     ];
     echo json_encode($respuesta);
 }
