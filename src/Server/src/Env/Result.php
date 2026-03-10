@@ -2,29 +2,29 @@
 
 namespace App\Env;
 
-use App\Env\Symbol;
-
 class Result
 {
-    const BOOLEAN = "Bool";
-    const CHAR = "Character";
-    const INT = "Int";
-    const FLOAT = "Float";
-    const STRING = "String";
-    const NULO = "null";
+    const INT32   = 'int32';
+    const FLOAT32 = 'float32';
+    const BOOL    = 'bool';
+    const RUNE    = 'rune';
+    const STRING  = 'string';
+    const NIL     = 'nil';
 
-    public $tipo;
-    public $valor;
-    public $isReturn;
+    public string $tipo;
+    public mixed  $valor;
+    public bool   $esReturn   = false;
+    public bool   $esBreak    = false;
+    public bool   $esContinue = false;
 
-    public function __construct($tipo, $valor)
+    public function __construct(string $tipo, mixed $valor)
     {
-        $this->tipo = $tipo;
+        $this->tipo  = $tipo;
         $this->valor = $valor;
-        $this->isReturn = false;
     }
 
-    public static function buildVacio(): Result {
-        return new Result(self::NULO, null);
+    public static function nulo(): self
+    {
+        return new self(self::NIL, null);
     }
 }

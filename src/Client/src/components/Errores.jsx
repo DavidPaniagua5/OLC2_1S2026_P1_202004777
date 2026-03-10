@@ -1,4 +1,4 @@
-export default function Errores({ texto }) {
+export default function Errores({ data }) {
     return (
       <div className="seccion">
         <h3>Errores</h3>
@@ -12,4 +12,4 @@ export default function Errores({ texto }) {
       </div>
     );
   }
-    
+  

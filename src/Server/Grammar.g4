@@ -1,74 +1,286 @@
 grammar Grammar;
 
-// Tokens a ignorar
-WS : [ \n\r\t\u000B\u000C\u0000]+				-> channel(HIDDEN) ;
+// ============================================================
+// TOKENS IGNORADOS
+// ============================================================
+WS          : [ \t\r\n\u000B\u000C\u0000]+ -> channel(HIDDEN) ;
+BlockComment: '/*' (BlockComment | .)*? '*/' -> channel(HIDDEN) ;
+LineComment : '//' .*? ('\n' | EOF)          -> channel(HIDDEN) ;
 
-Block_comment : '/*' (Block_comment|.)*? '*/'	-> channel(HIDDEN) ; // nesting comments allowed
-
-Line_comment : '//' .*? ('\n'|EOF)				-> channel(HIDDEN) ;
-
-p
-    : stmt* EOF                        # Program
+// ============================================================
+// PUNTO DE ENTRADA
+// ============================================================
+programa
+    : declaracionTop* EOF
     ;
 
-stmt
-    : 'print' '(' expresion ')' ';'               # PrintStatement
-    | 'var' tipos ID '=' expresion ';'            # VarDeclaration
-    | ID '=' expresion ';'                        # AssignmentStatement
-    | 'if' '(' expresion ')' block else?          # IfStatement
-    | 'return' expresion? ';'                     # ReturnStatement
-    | 'func' tipos ID '(' params? ')' block             # FunctionDeclaration //casi implementar
-    | llamadas_funciones                      # callFunctionStmt //no implementar
+// Declaraciones de nivel superior
+declaracionTop
+    : funcDecl
+    | varDecl
+    | constDecl
     ;
 
-block
-    : '{' stmt* '}'                        # BlockStatement
+// ============================================================
+// FUNCIONES
+// ============================================================
+funcDecl
+    : FUNC ID '(' listaParams? ')' tipoRetorno? bloque
     ;
 
-else
-    : 'else' block
+tipoRetorno
+    : tipo
+    | '(' tipo (',' tipo)* ')'
     ;
 
-llamadas_funciones
-    : ID '(' args? ')'                 # FunctionCallExpression //implementar
+listaParams
+    : param (',' param)*
     ;
 
-params
-    : tipos ID (',' tipos ID)*                      # ParameterList //implementar
+param
+    : ID tipo
     ;
 
-args
-    : expresion (',' expresion)*      # ArgumentList //implementar
+// ============================================================
+// BLOQUE
+// ============================================================
+bloque
+    : '{' sentencia* '}'
     ;
 
-//Gramatica ambigua
-expresion
-    : primary #PrimitivoExpression
-    | ID                               # ReferenceExpression
-    | llamadas_funciones # callFunction // no implementar
-    | '(' expresion ')'                        # GroupedExpression
-    | '-' expresion                            # NegacionExpression
-    | expresion op=('*' | '/') expresion               # AritmeticaExpression
-    | expresion op=('+' | '-') expresion               # AritmeticaExpression
-    | expresion op=('<'|'<='|'>='|'>'|'=='|'!=') expresion # RelacionalExpresion
+// ============================================================
+// SENTENCIAS
+// ============================================================
+sentencia
+    : varDecl
+    | constDecl
+    | declCorta
+    | asignacion
+    | asignacionCompuesta
+    | incDec
+    | sentenciaIf
+    | sentenciaFor
+    | sentenciaSwitch
+    | sentenciaReturn
+    | sentenciaBreak
+    | sentenciaContinue
+    | sentenciaExpr
     ;
 
-tipos 
-    : 'String'
-    | 'Int'
-    | 'Float'
-    | 'Bool'
-    | 'Character'
+// --- var x tipo = expr  /  var x, y tipo  /  var x, y tipo = e1, e2 ---
+varDecl
+    : VAR listaIds tipo ('=' listaExpr)?
+    ;
+
+// --- const ID tipo = expr ---
+constDecl
+    : CONST ID tipo '=' expr
+    ;
+
+// --- x := expr  /  x, y := e1, e2 ---
+declCorta
+    : listaIds ASSIGN_CORTO listaExpr
+    ;
+
+// --- x = expr  /  x, y = e1, e2 ---
+asignacion
+    : listaLvalue '=' listaExpr
+    ;
+
+// --- x += expr  x -= expr  x *= expr  x /= expr ---
+asignacionCompuesta
+    : lvalue op=(PLUS_ASSIGN | MINUS_ASSIGN | STAR_ASSIGN | SLASH_ASSIGN) expr
+    ;
+
+// --- x++  x-- ---
+incDec
+    : lvalue op=(INC | DEC)
+    ;
+
+// ============================================================
+// SENTENCIAS DE CONTROL
+// ============================================================
+sentenciaIf
+    : IF expr bloque (ELSE (sentenciaIf | bloque))?
+    ;
+
+sentenciaFor
+    : FOR declCorta ';' expr ';' (incDec | asignacionCompuesta) bloque  # ForClassico
+    | FOR expr bloque                                                     # ForWhile
+    | FOR bloque                                                          # ForInfinito
+    ;
+
+sentenciaSwitch
+    : SWITCH expr '{' casoSwitch* defaultSwitch? '}'
+    ;
+
+casoSwitch
+    : CASE listaExpr ':' sentencia*
+    ;
+
+defaultSwitch
+    : DEFAULT ':' sentencia*
+    ;
+
+sentenciaReturn
+    : RETURN listaExpr?
+    ;
+
+sentenciaBreak
+    : BREAK
+    ;
+
+sentenciaContinue
+    : CONTINUE
+    ;
+
+sentenciaExpr
+    : expr
+    ;
+
+// ============================================================
+// LVALUES
+// ============================================================
+lvalue
+    : ID ('[' expr ']')*
+    ;
+
+listaLvalue
+    : lvalue (',' lvalue)*
+    ;
+
+// ============================================================
+// LISTAS
+// ============================================================
+listaIds
+    : ID (',' ID)*
+    ;
+
+listaExpr
+    : expr (',' expr)*
+    ;
+
+// ============================================================
+// EXPRESIONES  (precedencia de menor a mayor, de arriba a abajo)
+// ============================================================
+expr
+    // OR  (menor precedencia)
+    : expr OR expr                                              # ExprOr
+
+    // AND
+    | expr AND expr                                             # ExprAnd
+
+    // Igualdad
+    | expr op=(EQ | NEQ) expr                                   # ExprIgualdad
+
+    // Relacional
+    | expr op=(LT | LE | GT | GE) expr                         # ExprRelacional
+
+    // Suma / Resta
+    | expr op=('+' | '-') expr                                  # ExprAditiva
+
+    // Multiplicación / División / Módulo
+    | expr op=('*' | '/' | '%') expr                           # ExprMultiplicativa
+
+    // Unarios
+    | '!' expr                                                  # ExprNot
+    | '-' expr                                                  # ExprNegacion
+    | '&' ID                                                    # ExprReferencia
+    | '*' ID                                                    # ExprDeref
+
+    // Primarios
+    | '(' expr ')'                                              # ExprAgrupada
+    | FMT_PRINTLN '(' listaExpr? ')'                           # ExprFmtPrintln
+    | ID '(' listaExpr? ')'                                    # ExprLlamada
+    | ID '[' expr ']'                                          # ExprIndiceArreglo
+    | ID                                                        # ExprId
+    | literal                                                   # ExprLiteral
+    | NIL                                                       # ExprNil
+    ;
+
+// ============================================================
+// LITERALES
+// ============================================================
+literal
+    : INT_LIT    # LiteralEntero
+    | FLOAT_LIT  # LiteralFlotante
+    | BOOL_LIT   # LiteralBool
+    | RUNE_LIT   # LiteralRune
+    | STR_LIT    # LiteralString
+    ;
+
+// ============================================================
+// TIPOS
+// ============================================================
+tipo
+    : 'int32'
+    | 'float32'
+    | 'bool'
+    | 'rune'
+    | 'string'
+    | 'int'
+    | '[' INT_LIT ']' tipo
+    | '*' tipo
     | ID
     ;
 
-primary    
-    : INT                              # IntExpression
-    | FLOAT # FloatExpresion
-    ;
+// ============================================================
+// PALABRAS RESERVADAS  (deben ir antes que ID)
+// ============================================================
+FUNC     : 'func'     ;
+VAR      : 'var'      ;
+CONST    : 'const'    ;
+IF       : 'if'       ;
+ELSE     : 'else'     ;
+FOR      : 'for'      ;
+SWITCH   : 'switch'   ;
+CASE     : 'case'     ;
+DEFAULT  : 'default'  ;
+RETURN   : 'return'   ;
+BREAK    : 'break'    ;
+CONTINUE : 'continue' ;
+NIL      : 'nil'      ;
 
-INT : [0-9]+ ;
-FLOAT : INT ('.' [0-9]+)?;
+// ============================================================
+// OPERADORES
+// ============================================================
+ASSIGN_CORTO : ':=' ;
+PLUS_ASSIGN  : '+=' ;
+MINUS_ASSIGN : '-=' ;
+STAR_ASSIGN  : '*=' ;
+SLASH_ASSIGN : '/=' ;
+INC          : '++' ;
+DEC          : '--' ;
+AND          : '&&' ;
+OR           : '||' ;
+EQ           : '==' ;
+NEQ          : '!=' ;
+LE           : '<=' ;
+GE           : '>=' ;
+LT           : '<'  ;
+GT           : '>'  ;
 
-ID  : [a-zA-Z_][a-zA-Z0-9_]* ;
-//WS  : [ \t\r\n]+ -> skip ;
+// ============================================================
+// TOKENS LITERALES
+// ============================================================
+// BOOL_LIT debe ir ANTES de ID para que 'true'/'false' no sean ID
+BOOL_LIT : 'true' | 'false' ;
+
+// Rune: carácter entre comillas simples con soporte de escape
+RUNE_LIT : '\'' ( ~['\\\r\n] | '\\' . ) '\'' ;
+
+// String: entre comillas dobles con soporte de escape
+STR_LIT  : '"' ( ~["\\\r\n] | '\\' . )* '"' ;
+
+// Float debe ir ANTES que INT para que "45.50" sea un token FLOAT
+FLOAT_LIT : [0-9]+ '.' [0-9]*
+          | '.' [0-9]+
+          ;
+
+INT_LIT  : [0-9]+ ;
+
+// fmt.Println como token único para evitar ambigüedad con el punto
+FMT_PRINTLN : 'fmt.Println' ;
+
+// Identificadores (después de todas las palabras reservadas)
+ID : [a-zA-Z_][a-zA-Z0-9_]* ;

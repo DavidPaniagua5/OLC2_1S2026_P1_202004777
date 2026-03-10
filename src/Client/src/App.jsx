@@ -13,7 +13,7 @@ export default function App() {
   const [astDot, setAstDot] = useState("");
   const [code, setCode] = useState("");
   const [consola, setConsola] = useState("");
-  const [errores, setErrores] = useState("");
+  const [errores, setErrores] = useState([]);
   const [simbolos, setSimbolos] = useState([]);
 
 
@@ -83,8 +83,7 @@ const handleSave = () => {
 
     setConsola("Ejecutando...");
     try {
-      //const res = await axios.post("http://localhost:5000/interpretar", { code });
-       const response = await fetch('http://localhost:8000/index.php', {
+        const response = await fetch('http://localhost:8000/index.php', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -116,23 +115,12 @@ const handleSave = () => {
     
       setConsola(newOutput.join("\n"));
       
-        //setSimbolos(data.simbolos);
-        setAstDot(data.ast);
-      } else{
-        const lineas = data.output
-        .split("\n")
-        .filter(line => line.trim() !== "");
-        const newOutput = [
-      //...consola, 
-      `[${timeStamp}]--- ERRORES DURANTE EL ANÁLISIS ---`
-      ];
-        lineas.forEach(linea => {
-        newOutput.push(`  ${linea}`);
-      });
-    
-      setErrores(newOutput.join("\n"));
+        setSimbolos(data.simbolos);
+        setAstDot(data.svg);
       }
-
+      else{
+        setErrores(data.errors);
+      }
     } catch (error) {
       setErrores("Error al interpretar.");
     }
@@ -167,7 +155,6 @@ const handleSave = () => {
       <div className="seccion" id ="DiTabla" tabIndex="-1">
         <Simbolos data={simbolos} />
       </div>
-
       <div className="seccion" id ="DiErrores" tabIndex="0">
         <Errores data={errores} />
       </div>
