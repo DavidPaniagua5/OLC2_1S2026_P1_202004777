@@ -7,13 +7,6 @@ use Antlr\Antlr4\Runtime\Tree\TerminalNode;
 use Antlr\Antlr4\Runtime\Tree\ErrorNode;
 use Antlr\Antlr4\Runtime\ParserRuleContext;
 
-/**
- * Genera el AST completo como SVG usando Graphviz (dot) en el servidor.
- * No usa viz.js — el SVG se renderiza aquí y se devuelve al frontend listo.
- *
- * Instalación requerida (una sola vez):
- *   sudo apt install graphviz
- */
 class GeneradorDot
 {
     // Tokens de puntuación que no aportan información visual
@@ -198,8 +191,8 @@ class GeneradorDot
         $aStr = implode("\n  ", $this->aristas);
         return <<<DOT
 digraph AST {
-  graph [rankdir=TB bgcolor="#ffffff" fontname="Helvetica" pad="0.5"]
-  node  [fontname="Helvetica" fontsize=11]
+  graph [rankdir=TB bgcolor="#ffffff" fontname="DejaVu Sans" pad="0.5"]
+  node  [fontname="DejaVu Sans" fontsize=25]
   edge  [color="#555555"]
   {$nStr}
   {$aStr}

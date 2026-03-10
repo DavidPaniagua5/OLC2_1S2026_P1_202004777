@@ -44,7 +44,7 @@ try {
     $inputStream = InputStream::fromString($input);
     $lexer       = new GrammarLexer($inputStream);
 
-    // Quitar el listener de consola por defecto de ANTLR y poner el nuestro
+    // Quitar el listener de consola por defecto de ANTLR y poner el mio
     $lexer->removeErrorListeners();
     $lexer->addErrorListener(new ErrorListener($errores, 'Léxico'));
 
@@ -71,10 +71,11 @@ try {
     if (!$errores->tieneErrores()) {
         $interprete = new Interpreter($errores);   // comparte el mismo manejador
         $salida     = $interprete->visit($tree);
-
-        $respuesta['success']  = true;
-        $respuesta['output']   = $salida;
-        $respuesta['simbolos'] = $interprete->tablaSimbolos();
+        if (!$errores->tieneErrores()){
+            $respuesta['success']  = true;
+            $respuesta['output']   = $salida;
+            $respuesta['simbolos'] = $interprete->tablaSimbolos();
+        }
     } else {
         // Hay errores de análisis — devolver el árbol parcial pero no ejecutar
         $respuesta['success'] = false;

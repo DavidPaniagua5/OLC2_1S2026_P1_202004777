@@ -61,7 +61,7 @@ const handleSave = () => {
     setConsola([]);
     setErrores([]);
     setSimbolos([]);
-    setAstDot('');
+    setAstDot("");
 
     if (fileInputRef && fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -97,8 +97,8 @@ const handleSave = () => {
         minute: '2-digit', 
         second: '2-digit' 
     });
-    console.log(data);
-      if (data.errores){
+    //console.log(data);
+      if (data.success){
         const lineas = data.output
         .split("\n")
         .filter(line => line.trim() !== "");
@@ -111,9 +111,9 @@ const handleSave = () => {
         newOutput.push(`  ${linea}`);
       });
     
-      setConsola(newOutput.join("\n"));
-      
+        setConsola(newOutput.join("\n"));
         setSimbolos(data.simbolos);
+        //console.log(data.svg);
         setAstDot(data.svg);
       }
       else{
