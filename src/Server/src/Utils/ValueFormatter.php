@@ -4,65 +4,106 @@ namespace App\Utils;
 
 use App\Env\Result;
 
-/**
- * Utilidad para formatear valores según su tipo.
- * Replica el comportamiento de Go en la impresión.
- */
 class ValueFormatter
 {
-    public static function toString(Result $res): string
+    public static function toString(Result $result): string
     {
-        return match ($res->tipo) {
-            Result::NIL     => '<nil>',
-            Result::BOOL    => $res->valor ? 'true' : 'false',
-            Result::FLOAT32 => self::formatearFloat($res->valor),
-            default         => (string)($res->valor ?? '<nil>'),
-        };
-    }
-
-    /**
-     * Formatea un float sin ceros innecesarios.
-     */
-    private static function formatearFloat(float $f): string
-    {
-        // Usar la representación más corta sin trailing zeros, igual que Go
-        $s = rtrim(sprintf('%.7g', $f), '0');
-        if (str_ends_with($s, '.')) {
-            $s .= '0';
+        if ($result->tipo === Result::NIL) {
+            return '<nil>';
         }
-        return $s;
+
+        if ($result->tipo === Result::BOOL) {
+            return $result->valor ? 'true' : 'false';
+        }
+
+        if ($result->tipo === Result::RUNE) {
+            return chr($result->valor);
+        }
+
+        if ($result->tipo === Result::FLOAT32) {
+            $valor = $result->valor;
+            
+            if (is_float($valor) || is_int($valor)) {
+                $str = (string)(float)$valor;
+                
+                if (strpos($str, '.') === false) {
+                    $str .= '.0';
+                } else {
+                    $partes = explode('.', $str);
+                    $decimal = $partes[1];
+                    
+                    if ((int)$decimal === 0) {
+                        $str = $partes[0] . '.0';
+                    }
+                }
+                return $str;
+            }
+            
+            return '0.0';
+        }
+
+        if ($result->tipo === Result::INT32) {
+            return (string)(int)$result->valor;
+        }
+
+        if ($result->tipo === Result::STRING) {
+            return $result->valor === null ? '' : (string)$result->valor;
+        }
+
+        return (string)$result->valor;
     }
 
-    /**
-     * Serializa un valor para la tabla de símbolos.
-     */
-    public static function serializarParaTabla(mixed $valor): mixed
+    public static function castear(Result $result, string $tipoDestino): mixed
     {
-        if (is_object($valor))  return '(objeto)';
-        if (is_array($valor))   return json_encode($valor);
-        if (is_bool($valor))    return $valor ? 'true' : 'false';
-        if (is_null($valor))    return null;
-        return $valor;
-    }
-
-    /**
-     * Convierte un valor a un tipo de destino.
-     */
-    public static function castear(Result $res, string $tipoDestino): mixed
-    {
-        if ($res->tipo === Result::NIL) {
+        if ($result->tipo === Result::NIL) {
             return null;
         }
 
-        return match ($tipoDestino) {
-            Result::INT32   => intval($res->valor),
-            Result::FLOAT32 => floatval($res->valor),
-            Result::BOOL    => (bool)$res->valor,
-            Result::RUNE    => is_string($res->valor)
-                                   ? mb_ord($res->valor)
-                                   : intval($res->valor),
-            Result::STRING  => self::toString($res),
-            default         => $res->valor,
-        };
+        if ($tipoDestino === Result::INT32) {
+            return (int)$result->valor;
+        }
+
+        if ($tipoDestino === Result::FLOAT32) {
+            return (float)$result->valor;
+        }
+
+        if ($tipoDestino === Result::BOOL) {
+            return (bool)$result->valor;
+        }
+
+        if ($tipoDestino === Result::RUNE) {
+            return (int)$result->valor;
+        }
+
+        if ($tipoDestino === Result::STRING) {
+            return (string)$result->valor;
+        }
+
+        return $result->valor;
+    }
+
+    public static function serializarParaTabla(mixed $valor): mixed
+    {
+        if ($valor === null) {
+            return '<nil>';
+        }
+
+        if (is_bool($valor)) {
+            return $valor ? 'true' : 'false';
+        }
+
+        if (is_float($valor)) {
+            $str = (string)$valor;
+            if (strpos($str, '.') === false) {
+                $str .= '.0';
+            }
+            return $str;
+        }
+
+        if (is_string($valor)) {
+            return $valor === '' ? '(vacío)' : $valor;
+        }
+
+        return $valor;
     }
 }

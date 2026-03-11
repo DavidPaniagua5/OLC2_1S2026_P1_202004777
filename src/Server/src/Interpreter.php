@@ -24,8 +24,8 @@ class Interpreter extends \GrammarBaseVisitor
         $envLocal = new Environment();
 
         $this->programVisitor = new ProgramVisitor(
-            $envGlobal,   // OK: variable
-            $envLocal,    // OK: variable
+            $envGlobal,
+            $envLocal, 
             $this->errores
         );
     }
@@ -38,9 +38,6 @@ class Interpreter extends \GrammarBaseVisitor
         return $this->programVisitor->visit($tree);
     }
 
-    /**
-     * Obtiene la tabla de símbolos compilada.
-     */
     public function tablaSimbolos(): array
     {
         // Combinar funciones globales + símbolos registrados

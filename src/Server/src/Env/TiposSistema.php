@@ -146,9 +146,6 @@ class TiposSistema
         ],
     ];
 
-    // ------------------------------------------------------------------
-    // Método principal: retorna el tipo resultado o null si es inválido
-    // ------------------------------------------------------------------
     public static function resultado(string $op, string $izq, string $der): ?string
     {
         $tabla = match ($op) {
