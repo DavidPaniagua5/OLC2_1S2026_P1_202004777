@@ -15,7 +15,6 @@ ANTLRv4/
 *.interp
 *Lexer.php
 *Parser.php
-*Listener.php
 *BaseListener.php
 
 # VSCode
@@ -45,9 +44,6 @@ ANTLRv4/
 *.interp
 *Lexer.php
 *Parser.php
-*Listener.php
-*Visitor.php
-*BaseListener.php
 /antlr/
 /ANTLR/
 /ANTLRv4/
