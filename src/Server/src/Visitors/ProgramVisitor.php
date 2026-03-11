@@ -7,13 +7,6 @@ use Context\FuncDeclContext;
 use Context\BloqueContext;
 use App\Env\{Environment, Symbol, Result, ManejadorErrores};
 
-/**
- * Procesa el programa completo.
- * Responsable de:
- * - Hoisting de funciones
- * - Declaraciones globales
- * - Búsqueda y ejecución de main()
- */
 class ProgramVisitor extends BaseVisitor
 {
     protected Environment $envGlobalLocal;
@@ -31,14 +24,12 @@ class ProgramVisitor extends BaseVisitor
 
     public function visitPrograma(ProgramaContext $ctx): string
     {
-        // FASE 1: HOISTING - Registrar todas las funciones
         foreach ($ctx->declaracionTop() as $decl) {
             if ($decl->funcDecl() !== null) {
                 $this->registrarFuncion($decl->funcDecl());
             }
         }
 
-        // FASE 2: Ejecutar declaraciones globales (var / const)
         $declVisitor = new DeclarationVisitor(
             $this->envGlobal,
             $this->env,
@@ -57,7 +48,6 @@ class ProgramVisitor extends BaseVisitor
         $this->registroSimbolosLocal = $declVisitor->obtenerRegistroSimbolos();
         $this->consola .= $declVisitor->obtenerConsola();
 
-        // FASE 3: Buscar y ejecutar main()
         try {
             $main = $this->envGlobal->obtener('main');
         } catch (\RuntimeException $e) {
@@ -119,7 +109,6 @@ class ProgramVisitor extends BaseVisitor
 
         $resultado = $this->visitBloque($fn->valor);
         
-        // Si es null, convertir a Result::nulo()
         if ($resultado === null) {
             $resultado = Result::nulo();
         }
@@ -132,7 +121,6 @@ class ProgramVisitor extends BaseVisitor
 
     public function visitBloque(BloqueContext $ctx): Result
     {
-        // Crear nuevo ámbito para el bloque
         $envAnterior = $this->env;
         $this->env = new Environment($envAnterior);
 
@@ -152,8 +140,7 @@ class ProgramVisitor extends BaseVisitor
                 }
             }
 
-            // Propagar señales de control hacia afuera
-            if ($resultado->esReturn || $resultado->esBreak || $resultado->esContinue) {
+            if ($resultado !== null && ($resultado->esReturn || $resultado->esBreak || $resultado->esContinue)) {
                 break;
             }
         }
@@ -161,9 +148,9 @@ class ProgramVisitor extends BaseVisitor
         $this->env = $envAnterior;
         return $resultado;
     }
+
     private function crearVisitorParaSentencia($sent): ?BaseVisitor
     {
-        
         return new ExpressionVisitor(
             $this->envGlobal,
             $this->env,
