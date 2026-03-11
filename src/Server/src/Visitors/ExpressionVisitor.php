@@ -81,18 +81,52 @@ class ExpressionVisitor extends BaseVisitor
 
             $res = $this->visit($exprs[$i]);
 
-            $tipoCompatible = $this->sonTiposCompatibles($sym->tipo, $res->tipo);
-            if (!$tipoCompatible) {
-                $this->errores->agregar(
-                    'Semántico',
-                    "Incompatibilidad de tipos: no se puede asignar '{$res->tipo}' a '{$sym->tipo}'.",
-                    $exprs[$i]->getStart()->getLine(),
-                    $exprs[$i]->getStart()->getCharPositionInLine()
-                );
-                continue;
-            }
+            if ($lv->expr() !== null && count($lv->expr()) > 0) {
+                if (!is_array($sym->valor)) {
+                    $this->errores->agregar(
+                        'Semántico',
+                        "'{$nombre}' no es un arreglo."
+                    );
+                    continue;
+                }
+                
+                foreach ($lv->expr() as $indiceExpr) {
+                    $indiceRes = $this->visit($indiceExpr);
+                    
+                    if ($indiceRes->tipo !== Result::INT32) {
+                        $this->errores->agregar(
+                            'Semántico',
+                            "Índice debe ser int32, se obtuvo '{$indiceRes->tipo}'."
+                        );
+                        continue 2;
+                    }
+                    
+                    $indice = (int)$indiceRes->valor;
+                    
+                    if (!isset($sym->valor[$indice])) {
+                        $this->errores->agregar(
+                            'Semántico',
+                            "Índice '{$indice}' fuera de rango."
+                        );
+                        continue 2;
+                    }
+                    
+                    $sym->valor[$indice] = ValueFormatter::castear($res, $sym->tipo);
+                }
+            } else {
+                $tipoCompatible = $this->sonTiposCompatibles($sym->tipo, $res->tipo);
+                if (!$tipoCompatible) {
+                    $this->errores->agregar(
+                        'Semántico',
+                        "Incompatibilidad de tipos: no se puede asignar '{$res->tipo}' a '{$sym->tipo}'.",
+                        $exprs[$i]->getStart()->getLine(),
+                        $exprs[$i]->getStart()->getCharPositionInLine()
+                    );
+                    continue;
+                }
 
-            $sym->valor = ValueFormatter::castear($res, $sym->tipo);
+                $sym->valor = ValueFormatter::castear($res, $sym->tipo);
+            }
         }
 
         return Result::nulo();
@@ -546,7 +580,53 @@ class ExpressionVisitor extends BaseVisitor
 
     public function visitExprIndiceArreglo($ctx): Result
     {
-        return Result::nulo();
+        $nombreArreglo = $ctx->ID()->getText();
+        $indiceCtx = $ctx->expr();
+        
+        try {
+            $sym = $this->env->obtener($nombreArreglo);
+        } catch (\RuntimeException $e) {
+            $this->errores->agregar(
+                'Semántico',
+                "Arreglo '{$nombreArreglo}' no declarado.",
+                $ctx->ID()->getSymbol()->getLine(),
+                $ctx->ID()->getSymbol()->getCharPositionInLine()
+            );
+            return Result::nulo();
+        }
+        
+        $indiceRes = $this->visit($indiceCtx);
+        
+        if ($indiceRes->tipo !== Result::INT32) {
+            $this->errores->agregar(
+                'Semántico',
+                "Índice debe ser int32, se obtuvo '{$indiceRes->tipo}'.",
+                $indiceCtx->getStart()->getLine(),
+                $indiceCtx->getStart()->getCharPositionInLine()
+            );
+            return Result::nulo();
+        }
+        
+        $indice = (int)$indiceRes->valor;
+        
+        if (!is_array($sym->valor)) {
+            $this->errores->agregar(
+                'Semántico',
+                "'{$nombreArreglo}' no es un arreglo."
+            );
+            return Result::nulo();
+        }
+        
+        if (!isset($sym->valor[$indice])) {
+            $this->errores->agregar(
+                'Semántico',
+                "Índice '{$indice}' fuera de rango para arreglo '{$nombreArreglo}'."
+            );
+            return Result::nulo();
+        }
+        
+        $valor = $sym->valor[$indice];
+        return new Result($sym->tipo, $valor);
     }
 
     public function visitSentenciaIf($ctx): Result
