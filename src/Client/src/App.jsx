@@ -97,7 +97,7 @@ const handleSave = () => {
         minute: '2-digit', 
         second: '2-digit' 
     });
-    //console.log(data);
+    console.log(data);
       if (data.success){
         const lineas = data.output
         .split("\n")
@@ -110,7 +110,7 @@ const handleSave = () => {
       lineas.forEach(linea => {
         newOutput.push(`  ${linea}`);
       });
-    
+        setErrores([]);
         setConsola(newOutput.join("\n"));
         setSimbolos(data.simbolos);
         //console.log(data.svg);

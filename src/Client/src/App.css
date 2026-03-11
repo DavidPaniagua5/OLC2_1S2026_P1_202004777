@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@100..800&display=swap');
 body {
   font-family: 'Roboto';
   background-color: #0e0e0e; /* negro oscuro */
@@ -35,13 +36,13 @@ body {
 .Titulo {
   display: flex;
   align-items: center;
-  gap: 0px;
   font-size: 3.5rem;
-  font-family: 'Inter', sans-serif;
-  font-weight: bold;
+  font-family: 'Sora', sans-serif;
+  font-weight: 500;
+  font-style:italic;
   color: #00ADD8;
   text-align: center;
-  letter-spacing: 1px;
+  letter-spacing: -2.5px;
 }
 .logo-inline {
   height: 0.9em;

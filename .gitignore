@@ -16,9 +16,7 @@ ANTLRv4/
 *Lexer.php
 *Parser.php
 *Listener.php
-*Visitor.php
 *BaseListener.php
-*BaseVisitor.php
 
 # VSCode
 .vscode/
@@ -50,7 +48,6 @@ ANTLRv4/
 *Listener.php
 *Visitor.php
 *BaseListener.php
-*BaseVisitor.php
 /antlr/
 /ANTLR/
 /ANTLRv4/
