@@ -2,10 +2,22 @@
 
 namespace App\Visitors;
 
-use Context\{VarDeclContext, ConstDeclContext, DeclCortaContext};
-use App\Env\{Result, Symbol, TiposSistema};
+use VarDeclContext;
+use ConstDeclContext;
+use DeclCortaContext;
+
+use App\Env\{Result, Symbol, TiposSistema, Environment};
 use App\Utils\ValueFormatter;
 
+/**
+ * Visitor para procesar declaraciones de variables y constantes.
+ * Maneja:
+ * - Declaraciones de variables con inicialización
+ * - Declaraciones de constantes
+ * - Declaraciones cortas
+ * - Generación de valores por defecto para tipos
+ * - Soporte para arreglos multidimensionales
+ */
 class DeclarationVisitor extends BaseVisitor
 {
     public function __construct(
@@ -17,7 +29,66 @@ class DeclarationVisitor extends BaseVisitor
         parent::__construct($envGlobal, $env, $errores, $ambitoActual);
     }
 
-    public function visitVarDecl(VarDeclContext $ctx): Result
+    // ============================================================
+    // MÉTODOS AUXILIARES PARA ARREGLOS MULTIDIMENSIONALES (NUEVOS)
+    // ============================================================
+
+    /**
+     * Extrae el tipo de elemento de un tipo de arreglo.
+     */
+    private function extraerTipoElemento(string $tipoArreglo): string
+    {
+        if (preg_match('/^\[(\d+)\](.+)$/', $tipoArreglo, $matches)) {
+            return $matches[2];
+        }
+        return $tipoArreglo;
+    }
+
+    /**
+     * Extrae todas las dimensiones de un tipo de arreglo.
+     */
+    private function obtenerDimensiones(string $tipoArreglo): array
+    {
+        $dimensiones = [];
+
+        while (preg_match('/^\[(\d+)\]/', $tipoArreglo, $matches)) {
+            $dimensiones[] = (int)$matches[1];
+            $tipoArreglo = substr($tipoArreglo, strlen($matches[0]));
+        }
+
+        return [
+            'dimensiones' => $dimensiones,
+            'tipoBase'    => $tipoArreglo
+        ];
+    }
+
+    /**
+     * Crea un arreglo multidimensional con valores por defecto.
+     */
+    private function crearArregloMultidimensional(
+        array $dimensiones,
+        string $tipoBase
+    ): mixed {
+        if (empty($dimensiones)) {
+            return TiposSistema::valorDefecto($tipoBase);
+        }
+
+        $tamano = array_shift($dimensiones);
+        $valorPorDefecto = empty($dimensiones)
+            ? TiposSistema::valorDefecto($tipoBase)
+            : $this->crearArregloMultidimensional($dimensiones, $tipoBase);
+
+        return array_fill(0, $tamano, $valorPorDefecto);
+    }
+
+    // ============================================================
+    // DECLARACIONES DE VARIABLES
+    // ============================================================
+
+    /**
+     * Procesa declaraciones de variables: var x tipo = expr
+     */
+    public function visitVarDecl($ctx): Result
     {
         $tipo  = $ctx->tipo()->getText();
         $ids   = $ctx->listaIds()->ID();
@@ -43,9 +114,9 @@ class DeclarationVisitor extends BaseVisitor
                     $this->errores,
                     $this->ambitoActual
                 );
-                
+
                 $res   = $exprVisitor->visit($exprs[$i]);
-                
+
                 if ($res->tipo !== Result::NIL && $res->tipo !== $tipo) {
                     $this->errores->agregar(
                         'Semántico',
@@ -55,7 +126,7 @@ class DeclarationVisitor extends BaseVisitor
                     );
                     continue;
                 }
-                
+
                 $valor = ValueFormatter::castear($res, $tipo);
             } else {
                 $valor = $this->generarValorDefecto($tipo);
@@ -74,7 +145,14 @@ class DeclarationVisitor extends BaseVisitor
         return Result::nulo();
     }
 
-    public function visitConstDecl(ConstDeclContext $ctx): Result
+    // ============================================================
+    // DECLARACIONES DE CONSTANTES
+    // ============================================================
+
+    /**
+     * Procesa declaraciones de constantes: const ID tipo = expr
+     */
+    public function visitConstDecl($ctx): Result
     {
         $nombre = $ctx->ID()->getText();
         $tipo   = $ctx->tipo()->getText();
@@ -112,8 +190,19 @@ class DeclarationVisitor extends BaseVisitor
         return Result::nulo();
     }
 
-    public function visitDeclCorta(DeclCortaContext $ctx): Result
+    // ============================================================
+    // DECLARACIONES CORTAS
+    // ============================================================
+
+    /**
+     * Procesa declaraciones cortas: x := expr
+     */
+    public function visitDeclCorta($ctx): Result
     {
+        if ($ctx === null) {
+            return Result::nulo();
+        }
+
         $ids   = $ctx->listaIds()->ID();
         $exprs = $ctx->listaExpr()->expr();
 
@@ -139,6 +228,7 @@ class DeclarationVisitor extends BaseVisitor
             if ($this->env->existeLocal($nombre)) {
                 try {
                     $sym = $this->env->obtener($nombre);
+
                     if ($sym->esConstante) {
                         $this->errores->agregar(
                             'Semántico',
@@ -148,6 +238,7 @@ class DeclarationVisitor extends BaseVisitor
                         );
                         continue;
                     }
+
                     $sym->valor = ValueFormatter::castear($res, $sym->tipo);
                     $this->registrarSimbolo($nombre, $sym->tipo, $sym->valor, $sym->clase);
                 } catch (\RuntimeException $e) {
@@ -168,26 +259,32 @@ class DeclarationVisitor extends BaseVisitor
         return Result::nulo();
     }
 
+    // ============================================================
+    // GENERACIÓN DE VALORES POR DEFECTO
+    // ============================================================
+
+    /**
+     * Genera el valor por defecto para un tipo.
+     * MEJORADO: Soporta arreglos multidimensionales.
+     */
     private function generarValorDefecto(string $tipo): mixed
     {
-        if (strpos($tipo, '[') !== false) {
-            preg_match('/\[(\d+)\]/', $tipo, $matches);
-            if (isset($matches[1])) {
-                $tamaño = (int)$matches[1];
-                $tipoElemento = str_replace($matches[0], '', $tipo);
-                
-                $valoresDefecto = array_fill(0, $tamaño, TiposSistema::valorDefecto($tipoElemento));
-                
-                if (strpos($tipoElemento, '[') !== false) {
-                    foreach ($valoresDefecto as $i => $val) {
-                        $valoresDefecto[$i] = $this->generarValorDefecto($tipoElemento);
-                    }
-                }
-                
-                return $valoresDefecto;
-            }
+        // Eliminar punteros del análisis
+        while (strpos($tipo, '*') === 0) {
+            $tipo = substr($tipo, 1);
         }
-        
-        return TiposSistema::valorDefecto($tipo);
+
+        // Analizar dimensiones del tipo
+        $info = $this->obtenerDimensiones($tipo);
+        $dimensiones = $info['dimensiones'];
+        $tipoBase = $info['tipoBase'];
+
+        // Si hay dimensiones, crear arreglo multidimensional
+        if (!empty($dimensiones)) {
+            return $this->crearArregloMultidimensional($dimensiones, $tipoBase);
+        }
+
+        // Si no hay dimensiones, retornar valor por defecto del tipo base
+        return TiposSistema::valorDefecto($tipoBase);
     }
 }

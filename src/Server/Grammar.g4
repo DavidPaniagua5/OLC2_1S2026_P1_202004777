@@ -1,286 +1,186 @@
 grammar Grammar;
 
 // ============================================================
-// TOKENS IGNORADOS
+// PROGRAMA Y FUNCIONES
 // ============================================================
-WS          : [ \t\r\n\u000B\u000C\u0000]+ -> channel(HIDDEN) ;
-BlockComment: '/*' (BlockComment | .)*? '*/' -> channel(HIDDEN) ;
-LineComment : '//' .*? ('\n' | EOF)          -> channel(HIDDEN) ;
+
+programa : (funcionDef | declaracion)* main EOF;
+
+main : 'func' 'main' '(' ')' bloque;
+
+funcionDef : 'func' ID '(' parametros? ')' tipoRetorno? bloque;
+
+parametros : parametro (',' parametro)*;
+
+parametro : ID tipo;
+
+tipoRetorno : tipo | '(' tipo (',' tipo)* ')';
 
 // ============================================================
-// PUNTO DE ENTRADA
+// DECLARACIONES
 // ============================================================
-programa
-    : declaracionTop* EOF
-    ;
 
-// Declaraciones de nivel superior
-declaracionTop
-    : funcDecl
-    | varDecl
-    | constDecl
-    ;
+declaracion : varDecl | constDecl;
 
-// ============================================================
-// FUNCIONES
-// ============================================================
-funcDecl
-    : FUNC ID '(' listaParams? ')' tipoRetorno? bloque
-    ;
+varDecl : 'var' listaIds tipo ('=' listaExpr)?;
 
-tipoRetorno
-    : tipo
-    | '(' tipo (',' tipo)* ')'
-    ;
+constDecl : 'const' ID tipo '=' expr;
 
-listaParams
-    : param (',' param)*
-    ;
+declCorta : listaIds ':=' listaExpr;
 
-param
-    : ID tipo
-    ;
+listaIds : ID (',' ID)*;
+
+listaExpr : expr (',' expr)*;
 
 // ============================================================
-// BLOQUE
+// TIPOS (MEJORADO PARA MULTIDIMENSIONALIDAD)
 // ============================================================
-bloque
-    : '{' sentencia* '}'
-    ;
+
+tipo : tipoBase ('[' INT_LIT ']')* 
+     | STAR tipo
+     ;
+
+tipoBase : 'int32' 
+         | 'float32' 
+         | 'bool' 
+         | 'rune' 
+         | 'string' 
+         | 'int'
+         | ID
+         ;
 
 // ============================================================
 // SENTENCIAS
 // ============================================================
-sentencia
-    : varDecl
-    | constDecl
-    | declCorta
-    | asignacion
-    | asignacionCompuesta
-    | incDec
-    | sentenciaIf
-    | sentenciaFor
-    | sentenciaSwitch
-    | sentenciaReturn
-    | sentenciaBreak
-    | sentenciaContinue
-    | sentenciaExpr
-    ;
 
-// --- var x tipo = expr  /  var x, y tipo  /  var x, y tipo = e1, e2 ---
-varDecl
-    : VAR listaIds tipo ('=' listaExpr)?
-    ;
+bloque : '{' sentencia* '}';
 
-// --- const ID tipo = expr ---
-constDecl
-    : CONST ID tipo '=' expr
-    ;
+sentencia : sentenciaExpr ';'
+          | varDecl ';'
+          | constDecl ';'
+          | declCorta ';'
+          | sentenciaIf
+          | sentenciaFor
+          | sentenciaSwitch
+          | sentenciaReturn ';'
+          | sentenciaBreak ';'
+          | sentenciaContinue ';'
+          | bloque
+          ;
 
-// --- x := expr  /  x, y := e1, e2 ---
-declCorta
-    : listaIds ASSIGN_CORTO listaExpr
-    ;
+sentenciaExpr : expr;
 
-// --- x = expr  /  x, y = e1, e2 ---
-asignacion
-    : listaLvalue '=' listaExpr
-    ;
+sentenciaIf : 'if' expr bloque ('else' bloque)?;
 
-// --- x += expr  x -= expr  x *= expr  x /= expr ---
-asignacionCompuesta
-    : lvalue op=(PLUS_ASSIGN | MINUS_ASSIGN | STAR_ASSIGN | SLASH_ASSIGN) expr
-    ;
+sentenciaFor : 'for' (forClassico | forWhile | forInfinito);
 
-// --- x++  x-- ---
-incDec
-    : lvalue op=(INC | DEC)
-    ;
+forClassico : declCorta ';' expr ';' (incDec | asignacionCompuesta) bloque;
+
+forWhile : expr bloque;
+
+forInfinito : bloque;
+
+sentenciaSwitch : 'switch' expr '{' casoSwitch* defaultSwitch? '}';
+
+casoSwitch : 'case' listaExpr ':' sentencia*;
+
+defaultSwitch : 'default' ':' sentencia*;
+
+sentenciaReturn : 'return' listaExpr?;
+
+sentenciaBreak : 'break';
+
+sentenciaContinue : 'continue';
 
 // ============================================================
-// SENTENCIAS DE CONTROL
+// EXPRESIONES (SIMPLIFICADAS PARA EVITAR CONFLICTOS)
 // ============================================================
-sentenciaIf
-    : IF expr bloque (ELSE (sentenciaIf | bloque))?
-    ;
 
-sentenciaFor
-    : FOR declCorta ';' expr ';' (incDec | asignacionCompuesta) bloque  # ForClassico
-    | FOR expr bloque                                                     # ForWhile
-    | FOR bloque                                                          # ForInfinito
-    ;
+expr : expr '||' expr                                          # ExprOr
+     | expr '&&' expr                                          # ExprAnd
+     | expr ('==' | '!=') expr                                 # ExprIgualdad
+     | expr ('<' | '<=' | '>' | '>=') expr                    # ExprRelacional
+     | expr ('+' | '-') expr                                   # ExprAditiva
+     | expr ('*' | '/' | '%') expr                             # ExprMultiplicativa
+     | '!' expr                                                # ExprNot
+     | '-' expr                                                # ExprNegacion
+     | '(' expr ')'                                            # ExprAgrupada
+     | 'fmt.Println' '(' listaExpr? ')'                        # ExprFmtPrintln
+     | 'nil'                                                   # ExprNil
+     | ID '[' expr ']' ('[' expr ']')*                         # ExprIndiceArreglo
+     | ID '(' listaExpr? ')'                                   # ExprLlamada
+     | '&' ID                                                  # ExprReferencia
+     | '*' ID                                                  # ExprDeref
+     | ID '=' listaExpr                                        # Asignacion
+     | ID ('+=' | '-=' | '*=' | '/=') expr                     # AsignacionCompuesta
+     | (ID | lvalue) ('++' | '--')                             # IncDecExpr
+     | ID                                                      # ExprId
+     | literal                                                 # ExprLiteral
+     ;
 
-sentenciaSwitch
-    : SWITCH expr '{' casoSwitch* defaultSwitch? '}'
-    ;
-
-casoSwitch
-    : CASE listaExpr ':' sentencia*
-    ;
-
-defaultSwitch
-    : DEFAULT ':' sentencia*
-    ;
-
-sentenciaReturn
-    : RETURN listaExpr?
-    ;
-
-sentenciaBreak
-    : BREAK
-    ;
-
-sentenciaContinue
-    : CONTINUE
-    ;
-
-sentenciaExpr
-    : expr
-    ;
-
-// ============================================================
-// LVALUES
-// ============================================================
-lvalue
-    : ID ('[' expr ']')*
-    ;
-
-listaLvalue
-    : lvalue (',' lvalue)*
-    ;
-
-// ============================================================
-// LISTAS
-// ============================================================
-listaIds
-    : ID (',' ID)*
-    ;
-
-listaExpr
-    : expr (',' expr)*
-    ;
-
-// ============================================================
-// EXPRESIONES
-// ============================================================
-expr
-    // OR  (menor precedencia)
-    : expr OR expr                                              # ExprOr
-
-    // AND
-    | expr AND expr                                             # ExprAnd
-
-    // Igualdad
-    | expr op=(EQ | NEQ) expr                                   # ExprIgualdad
-
-    // Relacional
-    | expr op=(LT | LE | GT | GE) expr                         # ExprRelacional
-
-    // Suma / Resta
-    | expr op=('+' | '-') expr                                  # ExprAditiva
-
-    // Multiplicación / División / Módulo
-    | expr op=('*' | '/' | '%') expr                           # ExprMultiplicativa
-
-    // Unarios
-    | '!' expr                                                  # ExprNot
-    | '-' expr                                                  # ExprNegacion
-    | '&' ID                                                    # ExprReferencia
-    | '*' ID                                                    # ExprDeref
-
-    // Primarios
-    | '(' expr ')'                                              # ExprAgrupada
-    | FMT_PRINTLN '(' listaExpr? ')'                           # ExprFmtPrintln
-    | ID '(' listaExpr? ')'                                    # ExprLlamada
-    | ID '[' expr ']'                                          # ExprIndiceArreglo
-    | ID                                                        # ExprId
-    | literal                                                   # ExprLiteral
-    | NIL                                                       # ExprNil
-    ;
+lvalue : ID ('[' expr ']')*;
 
 // ============================================================
 // LITERALES
 // ============================================================
-literal
-    : INT_LIT    # LiteralEntero
-    | FLOAT_LIT  # LiteralFlotante
-    | BOOL_LIT   # LiteralBool
-    | RUNE_LIT   # LiteralRune
-    | STR_LIT    # LiteralString
-    ;
+
+literal : LiteralEntero   
+        | LiteralFlotante 
+        | LiteralBool     
+        | LiteralRune     
+        | LiteralString   
+        ;
+
+LiteralEntero : INT_LIT;
+
+LiteralFlotante : FLOAT_LIT;
+
+LiteralBool : BOOL_LIT;
+
+LiteralRune : RUNE_LIT;
+
+LiteralString : STR_LIT;
 
 // ============================================================
-// TIPOS
+// TOKENS (ORDEN IMPORTANTE - MÁS ESPECÍFICO PRIMERO)
 // ============================================================
-tipo
-    : 'int32'
-    | 'float32'
-    | 'bool'
-    | 'rune'
-    | 'string'
-    | 'int'
-    | '[' INT_LIT ']' tipo
-    | '*' tipo
-    | ID
-    ;
 
-// ============================================================
-// PALABRAS RESERVADAS
-// ============================================================
-FUNC     : 'func'     ;
-VAR      : 'var'      ;
-CONST    : 'const'    ;
-IF       : 'if'       ;
-ELSE     : 'else'     ;
-FOR      : 'for'      ;
-SWITCH   : 'switch'   ;
-CASE     : 'case'     ;
-DEFAULT  : 'default'  ;
-RETURN   : 'return'   ;
-BREAK    : 'break'    ;
-CONTINUE : 'continue' ;
-NIL      : 'nil'      ;
-
-// ============================================================
-// OPERADORES
-// ============================================================
-ASSIGN_CORTO : ':=' ;
-PLUS_ASSIGN  : '+=' ;
-MINUS_ASSIGN : '-=' ;
-STAR_ASSIGN  : '*=' ;
-SLASH_ASSIGN : '/=' ;
-INC          : '++' ;
-DEC          : '--' ;
-AND          : '&&' ;
-OR           : '||' ;
-EQ           : '==' ;
-NEQ          : '!=' ;
-LE           : '<=' ;
-GE           : '>=' ;
-LT           : '<'  ;
-GT           : '>'  ;
-
-// ============================================================
-// TOKENS LITERALES
-// ============================================================
-// BOOL_LIT debe ir ANTES de ID para que 'true'/'false' no sean ID
+// Literales booleanos
 BOOL_LIT : 'true' | 'false' ;
 
-// Rune: carácter entre comillas simples con soporte de escape
+// Literales rune (carácter entre comillas simples)
 RUNE_LIT : '\'' ( ~['\\\r\n] | '\\' . ) '\'' ;
 
-// String: entre comillas dobles con soporte de escape
+// Literales string (entre comillas dobles)
 STR_LIT  : '"' ( ~["\\\r\n] | '\\' . )* '"' ;
 
-// Float debe ir ANTES que INT para que "45.50" sea un token FLOAT
-FLOAT_LIT : [0-9]+ '.' [0-9]*
+// Literales numéricos (FLOAT ANTES de INT - CRÍTICO)
+FLOAT_LIT : [0-9]+ '.' [0-9]+
+          | [0-9]+ '.'
           | '.' [0-9]+
           ;
 
 INT_LIT  : [0-9]+ ;
 
-// fmt.Println como token único para evitar ambigüedad con el punto
-FMT_PRINTLN : 'fmt.Println' ;
+// Identificadores (incluyendo fmt.Println)
+ID : [a-zA-Z_][a-zA-Z0-9_.]* ;
 
-// Identificadores (después de todas las palabras reservadas)
-ID : [a-zA-Z_][a-zA-Z0-9_]* ;
+// Operadores simples
+STAR : '*' ;
+
+// Delimitadores
+LPAREN : '(' ;
+RPAREN : ')' ;
+LBRACE : '{' ;
+RBRACE : '}' ;
+LBRACKET : '[' ;
+RBRACKET : ']' ;
+COMMA : ',' ;
+SEMICOLON : ';' ;
+COLON : ':' ;
+DOT : '.' ;
+
+// Whitespace e ignorar
+WS : [ \t\r\n]+ -> skip ;
+COMMENT : '//' ~[\r\n]* -> skip ;
+BLOCK_COMMENT : '/*' .*? '*/' -> skip ;
