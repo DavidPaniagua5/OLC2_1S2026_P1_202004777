@@ -9,33 +9,14 @@ use App\Env\{Result, ManejadorErrores};
  */
 interface IBuiltInFunction
 {
-    /**
-     * Ejecuta la función built-in.
-     * @param array<Result> $args Argumentos evaluados
-     * @return Result Resultado de la ejecución
-     */
     public function execute(array $args, ManejadorErrores $errores): Result;
-
-    /**
-     * Obtiene el nombre de la función.
-     */
     public function getNombre(): string;
-
-    /**
-     * Obtiene el número mínimo de argumentos requeridos.
-     */
     public function getMinArgs(): int;
-
-    /**
-     * Obtiene el número máximo de argumentos permitidos.
-     * Devuelve -1 si es variable.
-     */
     public function getMaxArgs(): int;
 }
 
 /**
- * Registro centralizado de funciones built-in.
- * Patrón Singleton para acceso global.
+ * Registro centralizado de funciones built-in (Singleton).
  */
 class BuiltInRegistry
 {
@@ -88,33 +69,25 @@ class BuiltInRegistry
 }
 
 // ===================================================================
-// IMPLEMENTACIONES DE FUNCIONES BUILT-IN
+// IMPLEMENTACIONES
 // ===================================================================
 
 class FmtPrintln implements IBuiltInFunction
 {
     public function execute(array $args, ManejadorErrores $errores): Result
     {
-        // Implementación delegada al visitor
         return Result::nulo();
     }
 
-    public function getNombre(): string
-    {
-        return 'fmt.Println';
-    }
-
-    public function getMinArgs(): int
-    {
-        return 0;
-    }
-
-    public function getMaxArgs(): int
-    {
-        return -1; // Variable
-    }
+    public function getNombre(): string  { return 'fmt.Println'; }
+    public function getMinArgs(): int    { return 0; }
+    public function getMaxArgs(): int    { return -1; }
 }
 
+/**
+ * len(s) → int32
+ * Acepta: string, arreglo (cualquier dimensión).
+ */
 class Len implements IBuiltInFunction
 {
     public function execute(array $args, ManejadorErrores $errores): Result
@@ -125,9 +98,11 @@ class Len implements IBuiltInFunction
         }
 
         $arg = $args[0];
+
         if ($arg->tipo === Result::STRING) {
             return new Result(Result::INT32, mb_strlen((string)$arg->valor));
         }
+
         if (is_array($arg->valor)) {
             return new Result(Result::INT32, count($arg->valor));
         }
@@ -136,45 +111,31 @@ class Len implements IBuiltInFunction
         return Result::nulo();
     }
 
-    public function getNombre(): string
-    {
-        return 'len';
-    }
-
-    public function getMinArgs(): int
-    {
-        return 1;
-    }
-
-    public function getMaxArgs(): int
-    {
-        return 1;
-    }
+    public function getNombre(): string  { return 'len'; }
+    public function getMinArgs(): int    { return 1; }
+    public function getMaxArgs(): int    { return 1; }
 }
 
+/**
+ * now() -> string  (YYYY-MM-DD HH:MM:SS)
+ */
 class Now implements IBuiltInFunction
 {
     public function execute(array $args, ManejadorErrores $errores): Result
     {
+        $tz = ini_get('date.timezone');
+        date_default_timezone_set($tz);
         return new Result(Result::STRING, date('Y-m-d H:i:s'));
     }
 
-    public function getNombre(): string
-    {
-        return 'now';
-    }
-
-    public function getMinArgs(): int
-    {
-        return 0;
-    }
-
-    public function getMaxArgs(): int
-    {
-        return 0;
-    }
+    public function getNombre(): string  { return 'now'; }
+    public function getMinArgs(): int    { return 0; }
+    public function getMaxArgs(): int    { return 0; }
 }
 
+/**
+ * substr(cadena, inicio, longitud) → string
+ */
 class Substr implements IBuiltInFunction
 {
     public function execute(array $args, ManejadorErrores $errores): Result
@@ -184,34 +145,27 @@ class Substr implements IBuiltInFunction
             return Result::nulo();
         }
 
-        $cadena = $args[0];
-        $inicio = $args[1];
-        $largo  = $args[2];
+        $cadena = (string)$args[0]->valor;
+        $inicio = (int)$args[1]->valor;
+        $largo  = (int)$args[2]->valor;
 
-        $resultado = mb_substr(
-            (string)$cadena->valor,
-            (int)$inicio->valor,
-            (int)$largo->valor
-        );
-        return new Result(Result::STRING, $resultado);
+        if ($inicio < 0 || $largo < 0 || $inicio + $largo > mb_strlen($cadena)) {
+            $errores->agregar('Semántico', 'substr(): índices inválidos o fuera de rango.');
+            return Result::nulo();
+        }
+
+        return new Result(Result::STRING, mb_substr($cadena, $inicio, $largo));
     }
 
-    public function getNombre(): string
-    {
-        return 'substr';
-    }
-
-    public function getMinArgs(): int
-    {
-        return 3;
-    }
-
-    public function getMaxArgs(): int
-    {
-        return 3;
-    }
+    public function getNombre(): string  { return 'substr'; }
+    public function getMinArgs(): int    { return 3; }
+    public function getMaxArgs(): int    { return 3; }
 }
 
+/**
+ * typeOf(expr) → string
+ * Retorna el nombre del tipo del argumento tal como lo maneja el intérprete.
+ */
 class TypeOf implements IBuiltInFunction
 {
     public function execute(array $args, ManejadorErrores $errores): Result
@@ -221,21 +175,17 @@ class TypeOf implements IBuiltInFunction
             return Result::nulo();
         }
 
-        return new Result(Result::STRING, $args[0]->tipo);
+        $tipo = $args[0]->tipo;
+
+        // Normalizar tipos de arreglo para presentación
+        if (str_starts_with($tipo, '[')) {
+            return new Result(Result::STRING, $tipo);
+        }
+
+        return new Result(Result::STRING, $tipo);
     }
 
-    public function getNombre(): string
-    {
-        return 'typeOf';
-    }
-
-    public function getMinArgs(): int
-    {
-        return 1;
-    }
-
-    public function getMaxArgs(): int
-    {
-        return 1;
-    }
+    public function getNombre(): string  { return 'typeOf'; }
+    public function getMinArgs(): int    { return 1; }
+    public function getMaxArgs(): int    { return 1; }
 }

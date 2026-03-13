@@ -24,14 +24,14 @@ abstract class BaseVisitor extends \GrammarBaseVisitor
         ManejadorErrores $errores,
         string $ambitoActual = 'global'
     ) {
-        $this->envGlobal     = $envGlobal;
-        $this->env           = $env;
-        $this->errores       = $errores;
-        $this->ambitoActual  = $ambitoActual;
+        $this->envGlobal    = $envGlobal;
+        $this->env          = $env;
+        $this->errores      = $errores;
+        $this->ambitoActual = $ambitoActual;
     }
 
     // ==============================================================
-    // MÉTODOS ORIGINALES (sin cambios)
+    // ACCESO A SÍMBOLOS
     // ==============================================================
 
     protected function obtenerSimbolo(string $nombre)
@@ -43,6 +43,10 @@ abstract class BaseVisitor extends \GrammarBaseVisitor
             return null;
         }
     }
+
+    // ==============================================================
+    // CONSOLA
+    // ==============================================================
 
     public function agregarConsola(string $texto): void
     {
@@ -58,6 +62,10 @@ abstract class BaseVisitor extends \GrammarBaseVisitor
     {
         $this->consola = '';
     }
+
+    // ==============================================================
+    // TABLA DE SÍMBOLOS
+    // ==============================================================
 
     public function registrarSimbolo(
         string $id,
@@ -101,16 +109,16 @@ abstract class BaseVisitor extends \GrammarBaseVisitor
     }
 
     // ==============================================================
-    // HELPERS PARA ARREGLOS (nuevo - corregido)
+    // HELPERS PARA ARREGLOS
     // ==============================================================
 
     protected function parseArrayType(string $tipo): array
     {
         $dims = [];
-        $t = $tipo;
+        $t    = $tipo;
         while (preg_match('/^\[(\d+)\](.*)$/', $t, $m)) {
             $dims[] = (int)$m[1];
-            $t = $m[2];
+            $t      = $m[2];
         }
         return ['dims' => $dims, 'base' => $t];
     }
@@ -130,39 +138,38 @@ abstract class BaseVisitor extends \GrammarBaseVisitor
             return TiposSistema::valorDefecto($base);
         }
         $size = array_shift($dims);
-        $sub = $this->crearArregloDefectoRec($dims, $base);
-        $arr = [];
+        $arr  = [];
         for ($i = 0; $i < $size; $i++) {
-            $arr[] = $sub;
+            $arr[] = $this->crearArregloDefectoRec($dims, $base);
         }
         return $arr;
     }
 
     protected function construirArregloDesdeLiteral($literalValueCtx, string $fullTipo): array
     {
-        $parsed = $this->parseArrayType($fullTipo);
-        $dims = $parsed['dims'];
-        $base = $parsed['base'];
+        $parsed     = $this->parseArrayType($fullTipo);
+        $dims       = $parsed['dims'];
+        $base       = $parsed['base'];
 
         if (empty($dims)) return [];
 
         $currentDim = array_shift($dims);
-        $subTipo = !empty($dims)
+        $subTipo    = !empty($dims)
             ? implode('', array_map(fn($d) => "[$d]", $dims)) . $base
             : $base;
 
-        $valor = [];
+        $valor         = [];
         $elementListCtx = $literalValueCtx->elementList();
-        $elementosCtx = $elementListCtx !== null ? $elementListCtx->elemento() : [];
+        $elementosCtx  = $elementListCtx !== null ? $elementListCtx->elemento() : [];
 
         for ($i = 0; $i < $currentDim; $i++) {
             if ($i < count($elementosCtx)) {
                 $elemCtx = $elementosCtx[$i];
                 if ($elemCtx->expr() !== null) {
-                    $res = $this->visit($elemCtx->expr());
-                    $valor[$i] = ValueFormatter::castear($res, $subTipo);
+                    $res        = $this->visit($elemCtx->expr());
+                    $valor[$i]  = ValueFormatter::castear($res, $subTipo);
                 } elseif ($elemCtx->literalValue() !== null) {
-                    $valor[$i] = $this->construirArregloDesdeLiteral($elemCtx->literalValue(), $subTipo);
+                    $valor[$i]  = $this->construirArregloDesdeLiteral($elemCtx->literalValue(), $subTipo);
                 }
             } else {
                 $valor[$i] = $this->crearValorDefecto($subTipo);
@@ -171,36 +178,59 @@ abstract class BaseVisitor extends \GrammarBaseVisitor
         return $valor;
     }
 
-    /**
-     * Ejecuta función (compartido con main y llamadas).
-     */
-    protected function ejecutarFuncion(Symbol $fn, array $args): Result
-    {
-        $nuevoEnv = new Environment($this->envGlobal);
+    // ==============================================================
+    // EJECUCIÓN DE FUNCIONES
+    // ==============================================================
 
-        if ($fn->params !== null) {
-            foreach ($fn->params as $i => $param) {
-                $arg = $args[$i] ?? Result::nulo();
-                $sym = new Symbol($param['tipo'], $arg->valor, Symbol::CLASE_VARIABLE, 0, 0);
+    protected function ejecutarFuncion(Symbol $fn, array $args): Result
+{
+    $nuevoEnv    = new Environment($this->envGlobal);
+    $referencias = []; // paramId → Symbol original del caller
+
+    if ($fn->params !== null) {
+        foreach ($fn->params as $i => $param) {
+            $arg       = $args[$i] ?? Result::nulo();
+            $tipoParam = $param['tipo'];
+
+            if (str_starts_with($tipoParam, '*')) {
+                // Parámetro puntero: &varNombre llega con tipo '__ref__'
+                if ($arg->tipo === '__ref__' && is_string($arg->valor)) {
+                    try {
+                        $refSym = $this->env->obtener($arg->valor);
+                        // Alias directo al mismo objeto Symbol
+                        $nuevoEnv->declarar($param['id'], $refSym);
+                        $referencias[$param['id']] = $refSym;
+                    } catch (\RuntimeException $e) {
+                        $sym = new Symbol(ltrim($tipoParam, '*'), null, Symbol::CLASE_VARIABLE, 0, 0);
+                        $nuevoEnv->declarar($param['id'], $sym);
+                    }
+                } else {
+                    // Pasaron el valor directamente sin &, crear copia
+                    $sym = new Symbol(ltrim($tipoParam, '*'), $arg->valor, Symbol::CLASE_VARIABLE, 0, 0);
+                    $nuevoEnv->declarar($param['id'], $sym);
+                }
+            } else {
+                $sym = new Symbol($tipoParam, $arg->valor, Symbol::CLASE_VARIABLE, 0, 0);
                 $nuevoEnv->declarar($param['id'], $sym);
             }
         }
-
-        $envAnterior = $this->env;
-        $ambitoAnterior = $this->ambitoActual;
-        
-        $this->env = $nuevoEnv;
-        $this->ambitoActual = $fn->nombre ?? 'funcion';
-
-        $resultado = $this->visitBloque($fn->valor);
-        
-        if ($resultado === null  || !$resultado->esReturn ) {
-            $resultado = Result::nulo();
-        }
-
-        $this->env = $envAnterior;
-        $this->ambitoActual = $ambitoAnterior;
-        
-        return $resultado;
     }
+
+    $envAnterior    = $this->env;
+    $ambitoAnterior = $this->ambitoActual;
+
+    $this->env          = $nuevoEnv;
+    $this->ambitoActual = $fn->nombre ?? 'funcion';
+
+    $resultado = $this->visitBloque($fn->valor);
+
+    $this->env          = $envAnterior;
+    $this->ambitoActual = $ambitoAnterior;
+
+    if ($resultado === null || !$resultado->esReturn) {
+        return Result::nulo();
+    }
+
+    return $resultado;
+}
 }

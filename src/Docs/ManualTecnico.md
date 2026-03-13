@@ -345,6 +345,549 @@ Una de las funciones principales de este Visitor, es que, es el encargado de bus
         }
 ~~~
 
+Como busca el punto de entrada, también es el encargado de registrar las funciones, para validar que no existan duplicado, o que una función exista fuera de la función main, valida que en caso de existir retonos los devuelva con el tipo y valor correspondientes.
+
+~~~php
+private function registrarFuncion(FuncDeclContext $ctx): void
+    {
+        $nombre = $ctx->ID()->getText();
+        $params = [];
+
+        if ($ctx->listaParams() !== null) {
+            foreach ($ctx->listaParams()->param() as $p) {
+                $params[] = [
+                    'id'   => $p->ID()->getText(),
+                    'tipo' => $p->tipo()->getText(),
+                ];
+            }
+        }
+
+        $tipoRet = ($ctx->tipoRetorno() !== null)
+            ? $ctx->tipoRetorno()->getText()
+            : Result::NIL;
+
+        $sym         = new Symbol($tipoRet, $ctx->bloque(), Symbol::CLASE_FUNCION, 0, 0);
+        $sym->params = $params;
+        $sym->nombre = $nombre;
+        $this->envGlobal->declarar($nombre, $sym);
+    }
+~~~
+
+La función ´visitBloque´ tiene una funcionalidad importante, ya que acá se llama a la clase ´ExpressionVisitor´, esta es la encargada de manejar la lógica del lenguaje, de las declaraciones y de los ciclos como el for, if, etc.
+
+Con esta simple declaración se declara un nuevo bloque, que puede ser llamado también un nuevo entorno.
+
+~~~php
+$visitor = new ExpressionVisitor(
+                $this->envGlobal,
+                $this->env,
+                $this->errores,
+                $this->ambitoActual
+            );
+~~~
+
+### ExpresionVisitor
+
+ExpressionVisitor es el encargado de toda la lógica del lenguaje, acá se manejan los entornos, las declaraciones, las sentencias y demás funciones del lenguaje.
+
+Para la declaración de variables, se uriliza una función robusta, que maneja la declaración dentro de entornos o dentro de la funciones, 
+
+~~~php
+public function visitVarDecl(VarDeclContext $ctx): Result
+    {
+        $tipo = $ctx->tipo() !== null ? $ctx->tipo()->getText() : null;
+        $ids   = $ctx->listaIds()->ID();
+        $exprs = $ctx->listaExpr() !== null ? $ctx->listaExpr()->expr() : [];
+
+        $valores = [];
+        if (!empty($exprs)) {
+            if (count($exprs) === 1) {
+                $r = $this->visit($exprs[0]);
+                if ($r->tipo === '__multi__' && is_array($r->valor)) {
+                    $valores = $r->valor; // desempaquetar múltiples retornos
+                } else {
+                    $valores = [$r];
+                }
+            } else {
+                foreach ($exprs as $e) {
+                    $valores[] = $this->visit($e);
+                }
+            }
+        }
+
+        foreach ($ids as $i => $nodoId) {
+            $nombre = $nodoId->getText();
+~~~
+
+Maneja los errores semánticos de declaración duplicada en un mismo entorno, esto asegura un código limpio y un manejo eficiente de la memoria y aplicación de leyes estrictas del lenguaje. 
+
+~~~php
+            if ($this->env->existeLocal($nombre)) {
+                $this->errores->agregar(
+                    'Semántico',
+                    "Identificador '{$nombre}' ya ha sido declarado en este ámbito.",
+                    $nodoId->getSymbol()->getLine(),
+                    $nodoId->getSymbol()->getCharPositionInLine()
+                );
+                continue;
+            }
+~~~
+
+Se valida que la asignación tenga un valor en la declaración, dependiendo del tipo asignado. En caso de no exisitr, se agrega una funcionalidad para agregar valores por defecto, dependiendo del tipo de variable declarada.
+
+~~~php
+            if (isset($valores[$i])) {
+                $res       = $valores[$i];
+                $tipoFinal = $tipo ?? $res->tipo;
+                $valor     = ValueFormatter::castear($res, $tipoFinal);
+            } else {
+                $tipoFinal = $tipo ?? Result::NIL;
+                $valor     = $this->crearValorDefecto($tipoFinal);
+            }
+
+            $sym = new Symbol($tipoFinal, $valor, Symbol::CLASE_VARIABLE, 0, 0);
+            $this->env->declarar($nombre, $sym);
+
+            $this->registrarSimbolo(
+                $nombre, $tipoFinal, $valor, Symbol::CLASE_VARIABLE,
+                $nodoId->getSymbol()->getLine(),
+                $nodoId->getSymbol()->getCharPositionInLine()
+            );
+        }
+        return Result::nulo();
+    }
+~~~
+
+El lenguaje permite declaraciones compuestas, para poder manejar diversidad de valores en una misma línea. Esta rsive el contexto generado por Antlr y utiliza el nombre para validar que no se haya declarado con anterioridad.
+
+~~~php
+public function visitAsignacionCompuesta(AsignacionCompuestaContext $ctx): Result
+    {
+        $nombre = $ctx->lvalue()->ID()->getText();
+
+        try {
+            $sym = $this->env->obtener($nombre);
+~~~
+
+El manejo de errores sigue presente, se debe declarar con anterioridad para poder asignarle un valor, por lo que debe existir en el entorno actual o global para poder cambiar o asignarle un valor, si no se asigna el error.
+
+~~~php
+        } catch (\RuntimeException $e) {
+            $this->errores->agregar(
+                'Semántico',
+                "Variable '{$nombre}' no declarada.",
+                $ctx->lvalue()->ID()->getSymbol()->getLine(),
+                $ctx->lvalue()->ID()->getSymbol()->getCharPositionInLine()
+            );
+            return Result::nulo();
+        }
+~~~
+
+Se utiliza el lado derecho de la expresión como el valor que se asignará y el lado izquierdo se refiere a la variable que tomará la declaración, se agrega una validación adicional para asegurarce que exista el símbolo '='.
+
+~~~php
+        $derecha = $this->visit($ctx->expr());
+        $izq     = new Result($sym->tipo, $sym->valor);
+        $op      = rtrim($ctx->op->getText(), '=');
+
+        $nuevo = $this->binarioOp->aplicar($op, $izq, $derecha);
+        if ($nuevo->tipo !== Result::NIL) {
+            $sym->valor = $nuevo->valor;
+        }
+
+        return Result::nulo();
+    }
+~~~
+
+Se definen tambien estructuras de control, como el ´IF´. Este inicia como los demás, tomando su respectivo contexto como parámetro y evaluando que la condición sea de tipo booleano.
+
+~~~php
+public function visitSentenciaIf($ctx): Result
+    {
+        $cond = $this->visit($ctx->expr());
+
+        if ($cond->tipo !== Result::BOOL) {
+~~~
+
+En caso de no ser de tipo booleano, se maneja el error semántico, pues el if exige que la condición a evaluar sea booelana para funcionar.
+
+~~~php
+            $this->errores->agregar(
+                'Semántico',
+                "La condición del 'if' debe ser bool, se obtuvo '{$cond->tipo}'.",
+                $ctx->expr()->getStart()->getLine(),
+                $ctx->expr()->getStart()->getCharPositionInLine()
+            );
+            return Result::nulo();
+        }
+~~~
+
+Acá ocurre la lógica real del ciclo if, se evalua la condición, en caso de cumplirse, se ejecutará ´visitBloque´, el cual ejecutará las instrucciones contenidas dentro del if, en caso de cumplir la condición. También se tiene soporte para evaluar ´else if´ y ´else´, agregando el soporte completo de condiciones al lenguaje.
+
+~~~php
+
+        if ($cond->valor) {
+            return $this->visitBloque($ctx->bloque(0));
+        } else {
+            // else if
+            if ($ctx->sentenciaIf() !== null) {
+                return $this->visit($ctx->sentenciaIf());
+            }
+            // else bloque
+            $bloques = $ctx->bloque();
+            if (count($bloques) > 1) {
+                return $this->visitBloque($bloques[1]);
+            }
+        }
+
+        return Result::nulo();
+    }
+~~~
+
+Se reconocen 2 estructuras para el for, un for tradicional y su variante, el ciclo while. El ciclo while, inicia evaluando la condición de tipo booleaa, con su manejo de error en caso no cumplir, y terminando la ejecución al tener un false.
+
+
+~~~php
+public function visitForWhile($ctx): Result
+    {
+        $resultado = Result::nulo();
+
+        while (true) {
+            $cond = $this->visit($ctx->expr());
+
+            if ($cond->tipo !== Result::BOOL) {
+                $this->errores->agregar('Semántico', "Condición del for debe ser bool.");
+                break;
+            }
+
+            if (!$cond->valor) {
+                break;
+            }
+~~~
+
+Al igual que cualquier lenguaje, el ciclo while tiene soporte para los casos de continue y break, los cuales son elementos de control del ciclo, estos poseen la particuralidad de terminar o mantener el flujo del ciclo, pueden hacer que estructuras cambien su comportamiento. 
+
+~~~php
+            $resultado = $this->visitBloque($ctx->bloque());
+
+            if ($resultado !== null) {
+                if ($resultado->esBreak) {
+                    $resultado = Result::nulo();
+                    break;
+                }
+                if ($resultado->esContinue) {
+                    $resultado = Result::nulo();
+                }
+                if ($resultado->esReturn) {
+                    break;
+                }
+            }
+        }
+
+        return $resultado;
+    }
+~~~
+
+El ciclo for tradicional, también posee 2 variables, el for clasico maneja la lógica para un ciclo for que posee declaración corta y evaluación de la condición booleana
+
+~~~php
+public function visitForClassico($ctx): Result
+    {
+        $envAnterior = $this->env;
+        $this->env   = new Environment($envAnterior);
+
+        if ($ctx->declCorta() !== null) {
+            $this->visit($ctx->declCorta());
+        }
+
+        $resultado = Result::nulo();
+~~~
+
+Valida que la condición se cumpla en cada iteración, y que el tipo de la condición sea booleana, esto hace que registre el error, en caso de no cumplirse.
+
+~~~php
+        while (true) {
+            $cond = $this->visit($ctx->expr());
+
+            if ($cond->tipo !== Result::BOOL) {
+                $this->errores->agregar('Semántico', "Condición del for debe ser bool.");
+                break;
+            }
+
+            if (!$cond->valor) {
+                break;
+            }
+~~~
+
+Se declara un nuevo ambiente, esto es escencial para poder manejar los iteradores y variables únicas dentro de este ciclo.
+
+~~~php
+            $bloqueEnv = new Environment($this->env);
+                $envTemp   = $this->env;
+                $this->env = $bloqueEnv;
+
+                $resultado = Result::nulo();
+                foreach ($ctx->bloque()->sentencia() as $sent) {
+                    $sv = new ExpressionVisitor(
+                        $this->envGlobal,
+                        $this->env,
+                        $this->errores,
+                        $this->ambitoActual
+                    );
+                    $resultado = $sv->visit($sent);
+                    $this->consola .= $sv->obtenerConsola();
+~~~
+
+Se valida que no sea ninguna de las estrucutras de control de flujo, como lo es continue o break, los cuales alteran las iteraciones del ciclo.
+
+~~~php
+
+if ($resultado !== null && ($resultado->esReturn || $resultado->esBreak || $resultado->esContinue)) {
+                        break;
+                    }
+                }
+
+                $this->env = $envTemp;
+            if ($resultado !== null) {
+                if ($resultado->esBreak) {
+                    $resultado = Result::nulo();
+                    break;
+                }
+                if ($resultado->esContinue) {
+                    $resultado = Result::nulo();
+                }
+                if ($resultado->esReturn) {
+                    break;
+                }
+            }
+
+            if ($ctx->incDec() !== null) {
+                $stepVisitor = new ExpressionVisitor(
+                    $this->envGlobal,
+                    $this->env,
+                    $this->errores,
+                    $this->ambitoActual
+                );
+                $stepVisitor->visit($ctx->incDec());
+                $this->consola .= $stepVisitor->obtenerConsola();
+            } elseif ($ctx->asignacionCompuesta() !== null) {
+                $stepVisitor = new ExpressionVisitor(
+                    $this->envGlobal,
+                    $this->env,
+                    $this->errores,
+                    $this->ambitoActual
+                );
+                $stepVisitor->visit($ctx->asignacionCompuesta());
+                $this->consola .= $stepVisitor->obtenerConsola();
+            }
+        }
+
+        $this->env = $envAnterior;
+        return $resultado;
+    }
+~~~
+
+El ciclo for infinito es más sencillo, este únicamente valida que las visitas a ´visitBloque´ no devuelvan los condicionantes del flujo, en caso de hacerlo se ejecutan las instrucciones correspondientes.
+
+~~~php
+    public function visitForInfinito($ctx): Result
+    {
+        $resultado = Result::nulo();
+
+        while (true) {
+            $resultado = $this->visitBloque($ctx->bloque());
+
+            if ($resultado !== null) {
+                if ($resultado->esBreak) {
+                    $resultado = Result::nulo();
+                    break;
+                }
+                if ($resultado->esContinue) {
+                    $resultado = Result::nulo();
+                }
+                if ($resultado->esReturn) {
+                    break;
+                }
+            }
+        }
+
+        return $resultado;
+    }
+~~~
+
+El ciclo Switch-Case se maneja de manera diferente, s ejecua un ciclo foreach, para conocer los casos y el deafault
+
+~~~php
+public function visitSentenciaSwitch($ctx): Result
+    {
+        $exprSwitch = $this->visit($ctx->expr());
+        $casos      = $ctx->casoSwitch();
+        $default    = $ctx->defaultSwitch();
+
+        $encontrado    = false;
+        $casoEjecutar  = null;
+
+        foreach ($casos as $caso) {
+            $listaExprCaso = $caso->listaExpr();
+~~~
+
+En caso de existir casos en el switch, se hará un foreach, acá se validará la opción del switch que se desea realizar
+
+~~~php
+            if ($listaExprCaso !== null) {
+                foreach ($listaExprCaso->expr() as $exprCaso) {
+                    $valCaso = $this->visit($exprCaso);
+                    if ($exprSwitch->valor == $valCaso->valor &&
+                        $exprSwitch->tipo  === $valCaso->tipo) {
+                        $encontrado   = true;
+                        $casoEjecutar = $caso;
+                        break 2;
+                    }
+                }
+            }
+        }
+~~~
+
+Si se encuentra el caso a ejecutar, se visitan los casos, en caso de no existir break, se seguirán ejecutando las demás instrucciones hasta que se encuentre el break.
+
+~~~php
+        if ($encontrado && $casoEjecutar !== null) {
+            foreach ($casoEjecutar->sentencia() as $sent) {
+                $resultado = $this->visit($sent);
+                if ($resultado !== null && ($resultado->esBreak || $resultado->esReturn)) {
+                    return $resultado->esReturn ? $resultado : Result::nulo();
+                }
+            }
+~~~
+
+Si el caso no pertenece a ninguno de los definidos, o no existe un break en los casos anteriores, se ejecutará el bloque default, el cual es el caso que siempre se ejecutará si no existe un break.
+
+~~~php            
+        } elseif ($default !== null) {
+            foreach ($default->sentencia() as $sent) {
+                $resultado = $this->visit($sent);
+                if ($resultado !== null && ($resultado->esBreak || $resultado->esReturn)) {
+                    return $resultado->esReturn ? $resultado : Result::nulo();
+                }
+            }
+        }
+
+        return Result::nulo();
+    }
+~~~
+
+Dentro de las funciones, la parte más importante es la definición del return, pues acá se devuelve el valor de la ejecución de procedimientos dentro de las mismas
+
+
+Acá se valida  la existencia o no de una lista de valores, para manjera múltiples retornos. Si no existe, se evalua que almenos se tenga un return
+
+~~~php
+public function visitSentenciaReturn(SentenciaReturnContext $ctx): Result
+    {
+        if ($ctx->listaExpr() !== null) {
+            $exprs  = $ctx->listaExpr()->expr();
+            $valores = $this->evaluarListaExprs($exprs);
+
+            if (count($valores) === 1) {
+                $res           = $valores[0];
+                $res->esReturn = true;
+                return $res;
+            }
+~~~
+
+Si existen múltiples retornos, se empquetan como un array de resultados, para poder devolverlos de manera correcta
+
+~~~php
+            $res           = new Result('__multi__', $valores);
+            $res->esReturn = true;
+            return $res;
+        }
+
+        $res           = Result::nulo();
+        $res->esReturn = true;
+        return $res;
+    }
+~~~
+
+La función encargada de realizar procedimientos dentro de funciones o estructuras de control, como el if o el for es la función ´visitBloque´
+
+Esta funcipon, se encarga de validar los entornos, si existe o si debe crear uno nuevo para la ejecución limpia.
+
+~~~php
+public function visitBloque($ctx): Result
+    {
+        $envAnterior = $this->env;
+        $this->env   = new Environment($envAnterior);
+
+        $resultado = Result::nulo();
+~~~
+
+Valida que existan sentencias a ejecutar, las cuales serán visitadas, creando una nueva instancia con las instrucciones a ejecutar.
+
+~~~php
+        foreach ($ctx->sentencia() as $sent) {
+            $visitor = new ExpressionVisitor(
+                $this->envGlobal,
+                $this->env,
+                $this->errores,
+                $this->ambitoActual
+            );
+
+            $resultado = $visitor->visit($sent);
+
+            $this->consola .= $visitor->obtenerConsola();
+
+            foreach ($visitor->obtenerRegistroSimbolos() as $sym) {
+                $this->registroSimbolos[] = $sym;
+            }
+~~~
+
+Se agrega soporte para que las estrucuturas de control sean manejadas correctamente.
+
+~~~php
+            if ($resultado !== null && ($resultado->esReturn || $resultado->esBreak || $resultado->esContinue)) {
+                break;
+            }
+        }
+~~~
+
+La parte más importante es que devuelve el entorno a su anterior estado, para que si está dentro de un ciclo o función no exista una sobreescritura del mismo. Se hace un retun de resultado, el cual ya devuelve toda la lógica aplicada por las instrucciones definidas en el bloque.
+
+~~~php
+        $this->env = $envAnterior;
+        return $resultado;
+    }
+~~~
+
+La función ´fmt.print´ es quien le dice al sistema que debe devolver impresiones de consola. Acá se agrega el soporte para impresión de valor de variables, valor dependiendo de la posición en un arreglo, valor devuelto por funciones, entre otros.
+
+~~~php
+    public function visitExprFmtPrintln(ExprFmtPrintlnContext $ctx): Result
+    {
+        $partes = [];
+        if ($ctx->listaExpr() !== null) {
+            foreach ($ctx->listaExpr()->expr() as $e) {
+                $res = $this->visit($e);
+~~~
+
+En caso que las funciones devuelvan múltiples valores, se agrega el soporte para la impresión de estos
+
+~~~php
+                if ($res->tipo === '__multi__' && is_array($res->valor)) {
+                    foreach ($res->valor as $r) {
+                        $partes[] = $this->resultToString($r);
+                    }
+                } else {
+                    $partes[] = $this->resultToString($res);
+                }
+            }
+        }
+        $this->agregarConsola(implode(' ', $partes) . "\n");
+        return Result::nulo();
+    }
+~~~
+
+
 ### Errores
 
 Los errores se manejan gracias a una  clase que se llama cada vez que alguno de los analizadores encuentra un error, la clase base maneja ambos tipos de errores, léxicos o sintácticos. Al utilizar un `patrón Visitor` se define la clase ErrorListener, la cuál es la base de los errores.

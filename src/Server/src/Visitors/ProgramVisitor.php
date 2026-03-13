@@ -24,13 +24,15 @@ class ProgramVisitor extends BaseVisitor
 
     public function visitPrograma(ProgramaContext $ctx): string
     {
+        // 1. Primer paso: registrar TODAS las funciones (hoisting)
         foreach ($ctx->declaracionTop() as $decl) {
             if ($decl->funcDecl() !== null) {
                 $this->registrarFuncion($decl->funcDecl());
             }
         }
 
-        $declVisitor = new DeclarationVisitor(
+        // 2. Segundo paso: ejecutar variables y constantes globales
+        $exprVisitor = new ExpressionVisitor(
             $this->envGlobal,
             $this->env,
             $this->errores,
@@ -39,15 +41,16 @@ class ProgramVisitor extends BaseVisitor
 
         foreach ($ctx->declaracionTop() as $decl) {
             if ($decl->varDecl() !== null) {
-                $declVisitor->visit($decl->varDecl());
+                $exprVisitor->visit($decl->varDecl());
             } elseif ($decl->constDecl() !== null) {
-                $declVisitor->visit($decl->constDecl());
+                $exprVisitor->visit($decl->constDecl());
             }
         }
 
-        $this->registroSimbolosLocal = $declVisitor->obtenerRegistroSimbolos();
-        $this->consola .= $declVisitor->obtenerConsola();
+        $this->registroSimbolosLocal = $exprVisitor->obtenerRegistroSimbolos();
+        $this->consola .= $exprVisitor->obtenerConsola();
 
+        // 3. Buscar y ejecutar main
         try {
             $main = $this->envGlobal->obtener('main');
         } catch (\RuntimeException $e) {
@@ -60,7 +63,7 @@ class ProgramVisitor extends BaseVisitor
             return $this->consola;
         }
 
-        $this->ejecutarFuncion($main, []);
+        $resultado = $this->ejecutarFuncion($main, []);
 
         return $this->consola;
     }
@@ -83,32 +86,33 @@ class ProgramVisitor extends BaseVisitor
             ? $ctx->tipoRetorno()->getText()
             : Result::NIL;
 
-        $sym          = new Symbol($tipoRet, $ctx->bloque(), Symbol::CLASE_FUNCION, 0, 0);
-        $sym->params  = $params;
-        $sym->nombre  = $nombre;
+        $sym         = new Symbol($tipoRet, $ctx->bloque(), Symbol::CLASE_FUNCION, 0, 0);
+        $sym->params = $params;
+        $sym->nombre = $nombre;
         $this->envGlobal->declarar($nombre, $sym);
     }
 
-    
     public function visitBloque(BloqueContext $ctx): Result
     {
         $envAnterior = $this->env;
-        $this->env = new Environment($envAnterior);
+        $this->env   = new Environment($envAnterior);
 
         $resultado = Result::nulo();
-        
+
         foreach ($ctx->sentencia() as $sent) {
-            $visitor = $this->crearVisitorParaSentencia($sent);
-            
-            if ($visitor !== null) {
-                $resultado = $visitor->visit($sent);
-                
-                $this->consola .= $visitor->obtenerConsola();
-                
-                $simbolos = $visitor->obtenerRegistroSimbolos();
-                foreach ($simbolos as $sym) {
-                    $this->registroSimbolosLocal[] = $sym;
-                }
+            $visitor = new ExpressionVisitor(
+                $this->envGlobal,
+                $this->env,
+                $this->errores,
+                $this->ambitoActual
+            );
+
+            $resultado = $visitor->visit($sent);
+
+            $this->consola .= $visitor->obtenerConsola();
+
+            foreach ($visitor->obtenerRegistroSimbolos() as $sym) {
+                $this->registroSimbolosLocal[] = $sym;
             }
 
             if ($resultado !== null && ($resultado->esReturn || $resultado->esBreak || $resultado->esContinue)) {
@@ -118,16 +122,6 @@ class ProgramVisitor extends BaseVisitor
 
         $this->env = $envAnterior;
         return $resultado;
-    }
-
-    private function crearVisitorParaSentencia($sent): ?BaseVisitor
-    {
-        return new ExpressionVisitor(
-            $this->envGlobal,
-            $this->env,
-            $this->errores,
-            $this->ambitoActual
-        );
     }
 
     public function obtenerEnv(): Environment

@@ -88,7 +88,14 @@ try {
     $respuesta['errors'][] = [
         'numero'      => 1,
         'tipo'        => 'Error interno',
-        'descripcion' => $e->getMessage(),
+        'descripcion' => $e->getMessage() 
+                       . ' | Clase: ' . get_class($e)
+                       . ' | Archivo: ' . basename($e->getFile())
+                       . ':' . $e->getLine()
+                       . ' | Trace: ' . str_replace("\n", " >> ", 
+                           implode("\n", array_slice(
+                               explode("\n", $e->getTraceAsString()), 0, 5
+                           ))),
         'linea'       => 0,
         'columna'     => 0,
     ];

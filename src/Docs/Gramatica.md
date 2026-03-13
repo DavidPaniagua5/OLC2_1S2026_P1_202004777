@@ -92,6 +92,7 @@ sentencia
     | sentenciaReturn
     | sentenciaBreak
     | sentenciaContinue
+    | bloque
     | sentenciaExpr
     ;
 
@@ -104,9 +105,9 @@ Dentro de las sentencias, se pueden definir varias opciones interesantes:
 Acá se realiza el análisis de los diferentes tipos de declaración de variables que soporta el lenguaje. Para una misma regla se definen el soporte para los diferentes tipos que puede tener la variable, además de los múltiples casos de declaración.
 
 ~~~php
-// var x tipo = expr  /  var x, y tipo  /  var x, y tipo = e1, e2
 varDecl
-    : VAR listaIds tipo ('=' listaExpr)?
+    : VAR listaIds tipo ('=' listaExpr)? 
+    | VAR listaIds '=' listaExpr
     ;
 ~~~
 
@@ -115,7 +116,6 @@ varDecl
 Al igual que las constantes, se desarrolla la regla para reconocer las constantes, siguindo la misma estructura.
 
 ~~~php
-// --- const ID tipo = expr ---
 constDecl
     : CONST ID tipo '=' expr
     ;
@@ -123,7 +123,6 @@ constDecl
 
 - Declaración corta: Se agrega el soporte de la declaración corta, en donde se asignan valores a variables ya declaradas.
 ~~~php
-// --- x := expr  /  x, y := e1, e2 ---
 declCorta
     : listaIds ASSIGN_CORTO listaExpr
     ;
@@ -132,7 +131,6 @@ declCorta
 - Asignación: Asignación normal a una o múltiples variables.
 
 ~~~php
-// --- x = expr  /  x, y = e1, e2 ---
 asignacion
     : listaLvalue '=' listaExpr
     ;
@@ -142,12 +140,10 @@ asignacion
 - Asignación compuesta: Maneja los diferentes tipos de asignación a números, disponible en múltilpres lenguajes, esta modifica el mismo valor de la variable, difernte para cada tipo, puede aumentar o disminuir el valor.
 
 ~~~php
-// --- x += expr  x -= expr  x *= expr  x /= expr ---
 asignacionCompuesta
     : lvalue op=(PLUS_ASSIGN | MINUS_ASSIGN | STAR_ASSIGN | SLASH_ASSIGN) expr
     ;
 
-// --- x++  x-- ---
 incDec
     : lvalue op=(INC | DEC)
     ;

@@ -4,7 +4,7 @@ grammar Grammar;
 // TOKENS IGNORADOS
 // ============================================================
 WS          : [ \t\r\n\u000B\u000C\u0000]+ -> channel(HIDDEN) ;
-BlockComment: '/*' (BlockComment | .)*? '*/' -> channel(HIDDEN) ;
+BlockComment: '/*' .*? '*/' -> channel(HIDDEN) ;
 LineComment : '//' .*? ('\n' | EOF)          -> channel(HIDDEN) ;
 
 // ============================================================
@@ -64,12 +64,14 @@ sentencia
     | sentenciaReturn
     | sentenciaBreak
     | sentenciaContinue
+    | bloque
     | sentenciaExpr
     ;
 
 // --- var x tipo = expr  /  var x, y tipo  /  var x, y tipo = e1, e2 ---
 varDecl
-    : VAR listaIds tipo ('=' listaExpr)?
+    : VAR listaIds tipo ('=' listaExpr)?   // var x int32 = 5
+    | VAR listaIds '=' listaExpr           // var x, y, z = funcion()
     ;
 
 // --- const ID tipo = expr ---
@@ -142,9 +144,9 @@ sentenciaExpr
 // LVALUES
 // ============================================================
 lvalue
-    : ID ('[' expr ']')*
+    : '*' ID
+    | ID ('[' expr ']')*
     ;
-
 listaLvalue
     : lvalue (',' lvalue)*
     ;
@@ -177,9 +179,8 @@ elementList
 
 elemento
     : expr
-    | literalValue 
+    | literalValue
     ;
-
 
 // ============================================================
 // EXPRESIONES
@@ -203,22 +204,36 @@ expr
     // Multiplicación / División / Módulo
     | expr op=('*' | '/' | '%') expr                           # ExprMultiplicativa
 
-    // Unarios
+    // Unarios (mayor precedencia que binarios)
     | '!' expr                                                  # ExprNot
     | '-' expr                                                  # ExprNegacion
+
     | '&' ID                                                    # ExprReferencia
     | '*' ID                                                    # ExprDeref
 
-    // Primarios
+    // Primarios (sin operandos izquierdos)
     | '(' expr ')'                                              # ExprAgrupada
-    | FMT_PRINTLN '(' listaExpr? ')'                           # ExprFmtPrintln
-    | ID '(' listaExpr? ')'                                    # ExprLlamada
-    | arregloLiteral                                           # ExprArregloLiteral
-    | ID ('[' expr ']')+                                          # ExprIndiceArreglo
+    | RUNE_TYPE   '(' expr ')'   # ExprCastRune
+
+    | INT32_TYPE  '(' expr ')'   # ExprCastInt32
+
+    | FLOAT32_TYPE '(' expr ')'  # ExprCastFloat32
+
+    | STRING_TYPE '(' expr ')'   # ExprCastString
+
+    | FMT_PRINTLN '(' listaExpr? ')'                            # ExprFmtPrintln
+
+    | ID '(' listaExpr? ')'                                     # ExprLlamada
+
+    | arregloLiteral                                            # ExprArregloLiteral
+
+    | ID ('[' expr ']')+                                        # ExprIndiceArreglo
+
     | ID                                                        # ExprId
+
+    // Literales
     | literal                                                   # ExprLiteral
     | NIL                                                       # ExprNil
-
     ;
 
 // ============================================================
@@ -235,18 +250,18 @@ literal
 // ============================================================
 // TIPOS
 // ============================================================
+
 tipo
-    : 'int32'
-    | 'float32'
-    | 'bool'
-    | 'rune'
-    | 'string'
-    | 'int'
+    : INT32_TYPE
+    | FLOAT32_TYPE
+    | BOOL_TYPE
+    | RUNE_TYPE
+    | STRING_TYPE
+    | INT_TYPE
     | '[' INT_LIT ']' tipo
     | '*' tipo
     | ID
     ;
-
 // ============================================================
 // PALABRAS RESERVADAS
 // ============================================================
@@ -286,8 +301,14 @@ GT           : '>'  ;
 // ============================================================
 // TOKENS LITERALES
 // ============================================================
-// BOOL_LIT debe ir ANTES de ID para que 'true'/'false' no sean ID
-BOOL_LIT : 'true' | 'false' ;
+INT32_TYPE   : 'int32'   ;
+FLOAT32_TYPE : 'float32' ;
+BOOL_TYPE    : 'bool'    ;
+BOOL_LIT    : 'true' | 'false' ;
+RUNE_TYPE    : 'rune'    ;
+STRING_TYPE  : 'string'  ;
+INT_TYPE     : 'int'     ;
+
 
 // Rune: carácter entre comillas simples con soporte de escape
 RUNE_LIT : '\'' ( ~['\\\r\n] | '\\' . ) '\'' ;
@@ -295,7 +316,7 @@ RUNE_LIT : '\'' ( ~['\\\r\n] | '\\' . ) '\'' ;
 // String: entre comillas dobles con soporte de escape
 STR_LIT  : '"' ( ~["\\\r\n] | '\\' . )* '"' ;
 
-// Float debe ir ANTES que INT para que "45.50" sea un token FLOAT
+// Float debe ir ANTES que INT para que "45.50" sea FLOAT_LIT
 FLOAT_LIT : [0-9]+ '.' [0-9]*
           | '.' [0-9]+
           ;
@@ -305,5 +326,5 @@ INT_LIT  : [0-9]+ ;
 // fmt.Println como token único para evitar ambigüedad con el punto
 FMT_PRINTLN : 'fmt.Println' ;
 
-// Identificadores (después de todas las palabras reservadas)
+// Identificadores (después de TODAS las palabras reservadas y tipos)
 ID : [a-zA-Z_][a-zA-Z0-9_]* ;
