@@ -250,8 +250,16 @@ class StatementVisitor extends BaseVisitor
     // RETURN / BREAK / CONTINUE
     // ==============================================================
 
-    public function visitSentenciaReturn(SentenciaReturnContext $ctx): Result
+        public function visitSentenciaReturn(SentenciaReturnContext $ctx): Result
     {
+        if ($ctx->listaExpr() !== null && count($ctx->listaExpr()->expr()) > 0) {
+            // Tomamos el primer (y único) valor retornado
+            $res = $this->visit($ctx->listaExpr()->expr()[0]);
+            $res->esReturn = true;
+            return $res;               // ← AQUÍ LLEVAMOS EL ARRAY
+        }
+
+        // Caso sin return explícito
         $res = Result::nulo();
         $res->esReturn = true;
         return $res;

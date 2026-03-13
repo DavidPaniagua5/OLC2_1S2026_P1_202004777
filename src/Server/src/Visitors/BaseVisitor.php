@@ -194,7 +194,7 @@ abstract class BaseVisitor extends \GrammarBaseVisitor
 
         $resultado = $this->visitBloque($fn->valor);
         
-        if ($resultado === null) {
+        if ($resultado === null  || !$resultado->esReturn ) {
             $resultado = Result::nulo();
         }
 

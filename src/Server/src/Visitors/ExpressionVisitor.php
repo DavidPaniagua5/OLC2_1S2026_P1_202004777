@@ -777,17 +777,17 @@ class ExpressionVisitor extends BaseVisitor
 
     
 
-    public function visitExprLlamada($ctx): Result
+        public function visitExprLlamada($ctx): Result
     {
         $nombreFuncion = $ctx->ID()->getText();
         $args = [];
-        
+
         if ($ctx->listaExpr() !== null) {
             foreach ($ctx->listaExpr()->expr() as $expr) {
                 $args[] = $this->visit($expr);
             }
         }
-        
+
         try {
             $fnSymbol = $this->envGlobal->obtener($nombreFuncion);
         } catch (\RuntimeException $e) {
@@ -809,24 +809,24 @@ class ExpressionVisitor extends BaseVisitor
             );
             return Result::nulo();
         }
-        
-        return Result::nulo();
+
+        return $this->ejecutarFuncion($fnSymbol, $args);
     }
 
-
-    public function visitSentenciaReturn(SentenciaReturnContext $ctx): Result
+        public function visitSentenciaReturn(SentenciaReturnContext $ctx): Result
     {
-        if ($ctx->listaExpr() !== null) {
-                $exprs = $ctx->listaExpr()->expr();            
-                if (count($exprs) > 0) {
-                    $res = $this->visit($exprs[0]);  // test solo retorna 1 valor
-                    $res->esReturn = true;
-                    return $res;
-            }
+        if ($ctx->listaExpr() !== null && count($ctx->listaExpr()->expr()) > 0) {
+            // Tomamos el primer (y único) valor retornado
+            $res = $this->visit($ctx->listaExpr()->expr()[0]);
+            $res->esReturn = true;
+            return $res;
         }
+
+        // Caso sin return explícito
         $res = Result::nulo();
         $res->esReturn = true;
         return $res;
     }
+
     
 }
