@@ -312,9 +312,11 @@ expr
     ;
 ~~~
 
-// ============================================================
-// LITERALES
-// ============================================================
+#### Literales
+
+Acá se maneja el verdadero valor de las expresiones de los arreglos, se maneja así para evitar errores.
+
+~~~php
 literal
     : INT_LIT    # LiteralEntero
     | FLOAT_LIT  # LiteralFlotante
@@ -322,6 +324,7 @@ literal
     | RUNE_LIT   # LiteralRune
     | STR_LIT    # LiteralString
     ;
+~~~
 
 ### Tipos
 
