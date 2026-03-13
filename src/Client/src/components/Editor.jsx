@@ -2,8 +2,16 @@ import React, { useEffect } from 'react';
 import AceEditor from 'react-ace';
 import ace from 'ace-builds';
 
+// Importa los archivos necesarios para que se incluyan en el bundle
+import 'ace-builds/src-noconflict/mode-javascript'; // Un modo base por si falla el tuyo
 import 'ace-builds/src-noconflict/theme-monokai';
 import 'ace-builds/src-noconflict/ext-language_tools';
+
+import aceWorkerUrl from 'ace-builds/src-noconflict/worker-base?url';
+ace.config.setModuleUrl('ace/mode/base_worker', aceWorkerUrl);
+
+// Configura el basePath apuntando a la carpeta de ace-builds en node_modules
+ace.config.set('basePath', `https://cdn.jsdelivr.net/npm/ace-builds@${ace.version}/src-noconflict/`);
 import './modo-lenguaje';
 
 // Lista de palabras clave para el autocompletado

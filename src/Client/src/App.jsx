@@ -4,6 +4,7 @@ import Simbolos from "./components/Simbolos"
 import AST from "./components/AST"
 import Consola from "./components/Consola"
 import Errores from "./components/Errores"
+import Swal from 'sweetalert2';
 
 import { useState } from 'react';
 import "./App.css";
@@ -32,48 +33,126 @@ export default function App() {
     }
   };
 
-const handleSave = () => {
-    const content = code; 
-
-    let fileName = window.sessionStorage.getItem('fileName') || 'Codigo.go';
-    if (!fileName.toLowerCase().endsWith('.go')) {
-    fileName += '.go';
+const handleSave = async () => {
+    const content = code;
+    if(!code.trim()){
+      const result = await Swal.fire({
+      title: '¡Error!',
+      text: "No hay código para guardar",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Ok',
+      });
     }
-    const blob = new Blob([content], { type: 'text/plain' });
+    if (code.trim()){
+      const result = await Swal.fire({
+      title: '¿Deseas guardar?',
+      text: "Seleccione si desea guardar el código",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, guardar',
+      //cancelButtonText: 'Cancelar'
+      });
 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
+      if (result.isConfirmed) {
+        let fileName = window.sessionStorage.getItem('fileName') || 'Codigo.go';
+        if (!fileName.toLowerCase().endsWith('.go')) {
+        fileName += '.go';
+        }
+        const blob = new Blob([content], { type: 'text/plain' });
 
-    document.body.appendChild(link);
-    link.click();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
 
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+        document.body.appendChild(link);
+        link.click();
+
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        //Swal.fire('¡Guardado!', 'Tu archivo ha sido guardado.', 'success');
+        
+      }
+
+    } 
     
-    console.log(`Guardando archivo como: ${fileName}`);
 };
 
-  // Función para limpiar el editor y la consola
-  const handleClear = (fileInputRef) => {
-    setCode('');
-    setConsola([]);
-    setErrores([]);
-    setSimbolos([]);
-    setAstDot("");
+ // Función para limpiar el editor y la consola
+  const handleClear = async (fileInputRef) => {
+    const content = code;
+    if (code.trim()){
+      const result = await Swal.fire({
+      title: '¿Deseas guardar?',
+      text: "Seleccione si desea guardar el código",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí',
+      cancelButtonText: 'No'
+      });
+      if (result.isConfirmed) {
+        let fileName = window.sessionStorage.getItem('fileName') || 'Codigo.go';
+        if (!fileName.toLowerCase().endsWith('.go')) {
+        fileName += '.go';
+        }
+        const blob = new Blob([content], { type: 'text/plain' });
 
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+
+        document.body.appendChild(link);
+        link.click();
+
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        setCode('');
+        setConsola([]);
+        setErrores([]);
+        setSimbolos([]);
+        setAstDot("");
+      
+    }else{
+      setCode('');
+      setConsola([]);
+      setErrores([]);
+      setSimbolos([]);
+      setAstDot("");
+    }
+  }else{
+      setCode('');
+      setConsola([]);
+      setErrores([]);
+      setSimbolos([]);
+      setAstDot("");
+    }
     if (fileInputRef && fileInputRef.current) {
         fileInputRef.current.value = '';
     }
 
   };
 
+  const handleClearConsola = async () =>{
+      setConsola([]);
+      setErrores([]);
+      setSimbolos([]);
+      setAstDot("");
+      const result = await Swal.fire({
+        title: 'Éxito',
+        text: "Limpieza realizada con éxito.",
+        icon: 'success',
+        timer:1500
+        });
+  }
+
   const handleOnRun = async () => {
     if (!code.trim()) {
       const nuevoError = {
-        tipo: 'Error', // Este valor se mapea a <strong>{e.tipo}</strong>
-        descripcion: 'No hay código para ejecutar' // Este valor se mapea a {e.descripcion}
+        tipo: 'Error',
+        descripcion: 'No hay código para ejecutar'
     };
       setErrores([nuevoError]);
       return
@@ -139,6 +218,7 @@ const handleSave = () => {
         onRun={handleOnRun}
         onLoadFile={handleLoadFile} 
         onSave={handleSave}
+        onClearConsola={handleClearConsola}
       />
     </div>
     <div className="contenedor-Titulo">

@@ -1,10 +1,11 @@
-import { FileUp, FilePlus, Save, Terminal, TriangleAlert, Table, Network, Play} from 'lucide-react';
+import { FileUp, FilePlus, Save, Terminal, TriangleAlert, Table, Network, Play, BrushCleaning} from 'lucide-react';
 import { useState, useRef } from 'react';
 
 
 const items = [
   { id: 'Abrir', icon: <FileUp size={26} /> },
-  { id: 'Limpiar', icon: <FilePlus size={26} /> },
+  { id: 'Nuevo', icon: <FilePlus size={26} /> },
+  { id: 'Limpiar', icon : <BrushCleaning size={26} />},
   { id: 'Guardar', icon: <Save size={26}/>},
   { id: 'Ejecutar', icon: <Play size={26} /> },
   { id: 'Consola', icon: <Terminal size={26} /> },
@@ -12,7 +13,7 @@ const items = [
   { id: 'Errores', icon: <TriangleAlert size={26} /> },
   { id: 'Arbol de Sintaxis (AST)', icon: <Network size={26} /> },
 ];
-export default function Sidebar({ onFileSelect, onClear, onRun, onLoadFile, onSave}) {
+export default function Sidebar({ onFileSelect, onClear, onRun, onLoadFile, onSave, onClearConsola}) {
   const [active, setActive] = useState('explorer');
   const [openFiles, setOpenFiles] = useState([]);
   const [currentFile, setCurrentFile] = useState(null);
@@ -37,8 +38,10 @@ export default function Sidebar({ onFileSelect, onClear, onRun, onLoadFile, onSa
           onClick={() => {
             if(id === 'Abrir'){
               fileInputRef.current.click();   
-            }else if(id === 'Limpiar'){
+            }else if(id === 'Nuevo'){
               onClear(fileInputRef);
+            }else if(id === 'Limpiar'){
+              onClearConsola();
             }else if(id === 'Guardar'){
               onSave();  
             }else if(id === 'Ejecutar'){

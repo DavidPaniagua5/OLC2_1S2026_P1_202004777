@@ -6,75 +6,52 @@ ace.define("ace/mode/golampi_highlight_rules", function(require, exports, module
     var GolampiHighlightRules = function() {
         this.$rules = {
             "start": [
-                // 1. COMENTARIOS (Línea única // y Multilínea /* */)
-                {
-                    token: "comment.block",
-                    regex: "/\\*",
-                    next: "comment_multi"
-                },
-                {
-                    token: "comment.line",
-                    regex: "//.*$"
-                },
-                // 2. CADENAS (Comillas dobles para string) 
-                {
-                    token: "string",
-                    regex: '".*?"'
-                },
-                // 3. CARACTERES (Comillas simples para rune) 
-                {
-                    token: "string.character",
-                    regex: "'.*?'"
-                },
-                // 4. PALABRAS CLAVE: Control de Flujo
+                // 1. COMENTARIOS
+                { token: "comment.block", regex: "/\\*", next: "comment_multi" },
+                { token: "comment.line", regex: "//.*$" },
+
+                // 2. CADENAS Y CARACTERES
+                { token: "string", regex: '".*?"' },
+                { token: "string.character", regex: "'.*?'" },
+
+                // 3. PALABRAS CLAVE (Control de Flujo y Declaración)
                 {
                     token: "keyword.control",
-                    regex: "\\b(if|else|switch|case|default|for|break|continue|return|func)\\b"
+                    regex: "\\b(if|else|switch|case|default|for|break|continue|return|func|var|const)\\b"
                 },
-                // 5. TIPOS DE DATOS ESTÁTICOS 
+
+                // 4. TIPOS DE DATOS ESTÁTICOS
                 {
                     token: "storage.type",
                     regex: "\\b(int32|float32|bool|rune|string)\\b"
                 },
-                // 6. CONSTANTES DE LENGUAJE 
-                {
-                    token: "constant.language",
-                    regex: "\\b(true|false|nil)\\b"
-                },
-                // 7. FUNCIONES EMBEBIDAS (Built-in) 
+
+                // 5. CONSTANTES DE LENGUAJE
+                { token: "constant.language", regex: "\\b(true|false|nil)\\b" },
+
+                // 6. FUNCIONES EMBEBIDAS
                 {
                     token: "support.function",
                     regex: "\\b(fmt\\.Println|len|now|substr|typeOf)\\b"
                 },
-                // 8. ASIGNACIÓN CORTA Y OPERADORES
+
+                // 7. OPERADORES (Incluyendo asignación corta := y punteros)
                 {
                     token: "keyword.operator",
-                    regex: ":=|=|\\+|\\-|\\*|/|%|==|!=|<|>|<=|>=|&&|\\|\\||!|&|\\*"
+                    regex: ":=|\\+=|-=|\\*=|/=|==|!=|<=|>=|&&|\\|\\||[=+*/%<>!&]"
                 },
-                // 9. NÚMEROS (Enteros y Decimales) 
-                {
-                    token: "constant.numeric",
-                    regex: "\\b\\d+(\\.\\d+)?\\b"
-                },
-                // 10. IDENTIFICADORES
-                {
-                    token: "variable.parameter",
-                    regex: "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
-                },
-                {
-                    token: "text",
-                    regex: "\\s+"
-                }
+
+                // 8. NÚMEROS
+                { token: "constant.numeric", regex: "\\b\\d+(\\.\\d+)?\\b" },
+
+                // 9. IDENTIFICADORES 
+                { token: "variable.other", regex: "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b" },
+
+                { token: "text", regex: "\\s+" }
             ],
             "comment_multi": [
-                {
-                    token: "comment.block",
-                    regex: "\\*/",
-                    next: "start"
-                },
-                {
-                    defaultToken: "comment.block"
-                }
+                { token: "comment.block", regex: "\\*/", next: "start" },
+                { defaultToken: "comment.block" }
             ]
         };
     };
@@ -83,7 +60,7 @@ ace.define("ace/mode/golampi_highlight_rules", function(require, exports, module
     exports.GolampiHighlightRules = GolampiHighlightRules;
 });
 
-ace.define("ace/mode/golampi", function(require, exports, module) {
+ace.define("ace/mode/custom", function(require, exports, module) {
     "use strict";
     var oop = require("../lib/oop");
     var TextMode = require("./text").Mode;
@@ -96,6 +73,7 @@ ace.define("ace/mode/golampi", function(require, exports, module) {
     oop.inherits(Mode, TextMode);
 
     (function() {
+        this.$id = "ace/mode/custom";
         this.type = "text";
     }).call(Mode.prototype);
 
