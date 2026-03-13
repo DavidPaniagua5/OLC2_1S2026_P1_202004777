@@ -89,36 +89,7 @@ class ProgramVisitor extends BaseVisitor
         $this->envGlobal->declarar($nombre, $sym);
     }
 
-    private function ejecutarFuncion(Symbol $fn, array $args): Result
-    {
-        $nuevoEnv = new Environment($this->envGlobal);
-
-        if ($fn->params !== null) {
-            foreach ($fn->params as $i => $param) {
-                $arg = $args[$i] ?? Result::nulo();
-                $sym = new Symbol($param['tipo'], $arg->valor, Symbol::CLASE_VARIABLE, 0, 0);
-                $nuevoEnv->declarar($param['id'], $sym);
-            }
-        }
-
-        $envAnterior = $this->env;
-        $ambitoAnterior = $this->ambitoActual;
-        
-        $this->env = $nuevoEnv;
-        $this->ambitoActual = $fn->nombre ?? 'funcion';
-
-        $resultado = $this->visitBloque($fn->valor);
-        
-        if ($resultado === null) {
-            $resultado = Result::nulo();
-        }
-
-        $this->env = $envAnterior;
-        $this->ambitoActual = $ambitoAnterior;
-        
-        return $resultado;
-    }
-
+    
     public function visitBloque(BloqueContext $ctx): Result
     {
         $envAnterior = $this->env;

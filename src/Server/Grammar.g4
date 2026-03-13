@@ -160,6 +160,27 @@ listaExpr
     : expr (',' expr)*
     ;
 
+// ==============================================================
+// LITERALES DE ARREGLOS
+// ==============================================================
+arregloLiteral
+    : '[' INT_LIT ']' tipo literalValue
+    ;
+
+literalValue
+    : '{' elementList? ','? '}'
+    ;
+
+elementList
+    : elemento (',' elemento)*
+    ;
+
+elemento
+    : expr
+    | literalValue 
+    ;
+
+
 // ============================================================
 // EXPRESIONES
 // ============================================================
@@ -192,10 +213,12 @@ expr
     | '(' expr ')'                                              # ExprAgrupada
     | FMT_PRINTLN '(' listaExpr? ')'                           # ExprFmtPrintln
     | ID '(' listaExpr? ')'                                    # ExprLlamada
-    | ID '[' expr ']'                                          # ExprIndiceArreglo
+    | arregloLiteral                                           # ExprArregloLiteral
+    | ID ('[' expr ']')+                                          # ExprIndiceArreglo
     | ID                                                        # ExprId
     | literal                                                   # ExprLiteral
     | NIL                                                       # ExprNil
+
     ;
 
 // ============================================================

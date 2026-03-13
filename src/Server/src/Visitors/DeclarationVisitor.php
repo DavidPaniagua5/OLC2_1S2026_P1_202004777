@@ -49,7 +49,8 @@ class DeclarationVisitor extends BaseVisitor
                 // Propagar consola
                 $this->consola .= $exprVisitor->obtenerConsola();
             } else {
-                $valor = TiposSistema::valorDefecto($tipo);
+                $valor = $this->crearValorDefecto($tipo);
+                //$valor = TiposSistema::valorDefecto($tipo);
             }
 
             // Crear símbolo y declarar en el entorno

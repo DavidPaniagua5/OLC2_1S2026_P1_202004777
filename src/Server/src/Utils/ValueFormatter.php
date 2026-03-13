@@ -17,7 +17,7 @@ class ValueFormatter
         }
 
         if ($result->tipo === Result::RUNE) {
-            return chr($result->valor);
+            return (string) $result->valor;
         }
 
         if ($result->tipo === Result::FLOAT32) {
@@ -72,6 +72,7 @@ class ValueFormatter
         }
 
         if ($tipoDestino === Result::RUNE) {
+            //return (string) $result->valor;
             return (int)$result->valor;
         }
 

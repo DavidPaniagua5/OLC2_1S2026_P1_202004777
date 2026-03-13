@@ -2,7 +2,8 @@
 
 namespace App\Visitors;
 
-use App\Env\{Environment, ManejadorErrores, Result};
+use App\Env\{Environment, ManejadorErrores, Result, TiposSistema, Symbol};
+use App\Utils\ValueFormatter;
 
 /**
  * Clase base para todos los visitors.
@@ -29,9 +30,10 @@ abstract class BaseVisitor extends \GrammarBaseVisitor
         $this->ambitoActual  = $ambitoActual;
     }
 
-    /**
-     * Obtener símbolo del entorno actual, buscando hacia arriba.
-     */
+    // ==============================================================
+    // MÉTODOS ORIGINALES (sin cambios)
+    // ==============================================================
+
     protected function obtenerSimbolo(string $nombre)
     {
         try {
@@ -42,9 +44,6 @@ abstract class BaseVisitor extends \GrammarBaseVisitor
         }
     }
 
-    /**
-     * Agrega texto a la consola.
-     */
     public function agregarConsola(string $texto): void
     {
         $this->consola .= $texto;
@@ -60,9 +59,6 @@ abstract class BaseVisitor extends \GrammarBaseVisitor
         $this->consola = '';
     }
 
-    /**
-     * Registra un símbolo en la tabla central.
-     */
     public function registrarSimbolo(
         string $id,
         string $tipo,
@@ -102,5 +98,109 @@ abstract class BaseVisitor extends \GrammarBaseVisitor
     public function obtenerRegistroSimbolos(): array
     {
         return $this->registroSimbolos;
+    }
+
+    // ==============================================================
+    // HELPERS PARA ARREGLOS (nuevo - corregido)
+    // ==============================================================
+
+    protected function parseArrayType(string $tipo): array
+    {
+        $dims = [];
+        $t = $tipo;
+        while (preg_match('/^\[(\d+)\](.*)$/', $t, $m)) {
+            $dims[] = (int)$m[1];
+            $t = $m[2];
+        }
+        return ['dims' => $dims, 'base' => $t];
+    }
+
+    protected function crearValorDefecto(string $tipo): mixed
+    {
+        if (!str_starts_with($tipo, '[')) {
+            return TiposSistema::valorDefecto($tipo);
+        }
+        $parsed = $this->parseArrayType($tipo);
+        return $this->crearArregloDefectoRec($parsed['dims'], $parsed['base']);
+    }
+
+    private function crearArregloDefectoRec(array $dims, string $base): mixed
+    {
+        if (empty($dims)) {
+            return TiposSistema::valorDefecto($base);
+        }
+        $size = array_shift($dims);
+        $sub = $this->crearArregloDefectoRec($dims, $base);
+        $arr = [];
+        for ($i = 0; $i < $size; $i++) {
+            $arr[] = $sub;
+        }
+        return $arr;
+    }
+
+    protected function construirArregloDesdeLiteral($literalValueCtx, string $fullTipo): array
+    {
+        $parsed = $this->parseArrayType($fullTipo);
+        $dims = $parsed['dims'];
+        $base = $parsed['base'];
+
+        if (empty($dims)) return [];
+
+        $currentDim = array_shift($dims);
+        $subTipo = !empty($dims)
+            ? implode('', array_map(fn($d) => "[$d]", $dims)) . $base
+            : $base;
+
+        $valor = [];
+        $elementListCtx = $literalValueCtx->elementList();
+        $elementosCtx = $elementListCtx !== null ? $elementListCtx->elemento() : [];
+
+        for ($i = 0; $i < $currentDim; $i++) {
+            if ($i < count($elementosCtx)) {
+                $elemCtx = $elementosCtx[$i];
+                if ($elemCtx->expr() !== null) {
+                    $res = $this->visit($elemCtx->expr());
+                    $valor[$i] = ValueFormatter::castear($res, $subTipo);
+                } elseif ($elemCtx->literalValue() !== null) {
+                    $valor[$i] = $this->construirArregloDesdeLiteral($elemCtx->literalValue(), $subTipo);
+                }
+            } else {
+                $valor[$i] = $this->crearValorDefecto($subTipo);
+            }
+        }
+        return $valor;
+    }
+
+    /**
+     * Ejecuta función (compartido con main y llamadas).
+     */
+    protected function ejecutarFuncion(Symbol $fn, array $args): Result
+    {
+        $nuevoEnv = new Environment($this->envGlobal);
+
+        if ($fn->params !== null) {
+            foreach ($fn->params as $i => $param) {
+                $arg = $args[$i] ?? Result::nulo();
+                $sym = new Symbol($param['tipo'], $arg->valor, Symbol::CLASE_VARIABLE, 0, 0);
+                $nuevoEnv->declarar($param['id'], $sym);
+            }
+        }
+
+        $envAnterior = $this->env;
+        $ambitoAnterior = $this->ambitoActual;
+        
+        $this->env = $nuevoEnv;
+        $this->ambitoActual = $fn->nombre ?? 'funcion';
+
+        $resultado = $this->visitBloque($fn->valor);
+        
+        if ($resultado === null) {
+            $resultado = Result::nulo();
+        }
+
+        $this->env = $envAnterior;
+        $this->ambitoActual = $ambitoAnterior;
+        
+        return $resultado;
     }
 }
