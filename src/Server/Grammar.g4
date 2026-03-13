@@ -4,25 +4,41 @@ grammar Grammar;
 // PROGRAMA Y FUNCIONES
 // ============================================================
 
-programa : (funcDecl | topDecl)* main EOF;
-
-topDecl : varDecl | constDecl;
+programa : (funcionDef | declaracion)* main EOF;
 
 main : 'func' 'main' '(' ')' bloque;
 
-funcDecl : 'func' ID '(' listaParams? ')' tipoRetorno? bloque;
+funcionDef : 'func' ID '(' parametros? ')' tipoRetorno? bloque;
 
-listaParams : param (',' param)*;
+parametros : parametro (',' parametro)*;
 
-param : ID tipo;
+parametro : ID tipo;
 
 tipoRetorno : tipo | '(' tipo (',' tipo)* ')';
 
 // ============================================================
-// TIPOS (SOPORTA ARREGLOS MULTIDIMENSIONALES Y PUNTEROS)
+// DECLARACIONES
 // ============================================================
 
-tipo : tipoBase ('[' INT_LIT ']')* STAR*;
+declaracion : varDecl | constDecl;
+
+varDecl : 'var' listaIds tipo ('=' listaExpr)?;
+
+constDecl : 'const' ID tipo '=' expr;
+
+declCorta : listaIds ':=' listaExpr;
+
+listaIds : ID (',' ID)*;
+
+listaExpr : expr (',' expr)*;
+
+// ============================================================
+// TIPOS (MEJORADO PARA MULTIDIMENSIONALIDAD)
+// ============================================================
+
+tipo : tipoBase ('[' INT_LIT ']')* 
+     | STAR tipo
+     ;
 
 tipoBase : 'int32' 
          | 'float32' 
@@ -34,46 +50,15 @@ tipoBase : 'int32'
          ;
 
 // ============================================================
-// DECLARACIONES (A NIVEL GLOBAL Y LOCAL)
-// ============================================================
-
-declaracion : varDecl | constDecl | declCorta;
-
-// MODIFICADO: Soporte para inicialización de arreglos
-varDecl : 'var' listaIds tipo ('=' arregloInit)?
-        | 'var' listaIds tipo ('=' listaExpr)?;
-
-constDecl : 'const' ID tipo '=' expr;
-
-// MODIFICADO: Soporte para inicialización de arreglos
-declCorta : listaIds ':=' arregloInit
-          | listaIds ':=' listaExpr;
-
-listaIds : ID (',' ID)*;
-
-listaExpr : expr (',' expr)*;
-
-// ============================================================
-// INICIALIZACIÓN DE ARREGLOS (NUEVA SECCIÓN)
-// ============================================================
-
-// Regla para inicializar arreglos:
-arregloInit : ('[' INT_LIT ']')+ tipoBase '{' filasMatriz? '}' ;
-filasMatriz : fila (',' fila)*;
-
-fila : '{' initListaExpr? '}' 
-     | initListaExpr;
-
-initListaExpr : expr (',' expr)* ','?;
-
-// ============================================================
-// BLOQUES Y SENTENCIAS
+// SENTENCIAS
 // ============================================================
 
 bloque : '{' sentencia* '}';
 
-sentencia : declaracion ';'
-          | sentenciaExpr ';'
+sentencia : sentenciaExpr ';'
+          | varDecl ';'
+          | constDecl ';'
+          | declCorta ';'
           | sentenciaIf
           | sentenciaFor
           | sentenciaSwitch
@@ -89,7 +74,7 @@ sentenciaIf : 'if' expr bloque ('else' bloque)?;
 
 sentenciaFor : 'for' (forClassico | forWhile | forInfinito);
 
-forClassico : declCorta ';' expr ';' expr bloque;
+forClassico : declCorta ';' expr ';' (incDec | asignacionCompuesta) bloque;
 
 forWhile : expr bloque;
 
@@ -108,7 +93,7 @@ sentenciaBreak : 'break';
 sentenciaContinue : 'continue';
 
 // ============================================================
-// EXPRESIONES (ORDEN DE PRECEDENCIA CORRECTO)
+// EXPRESIONES (SIMPLIFICADAS PARA EVITAR CONFLICTOS)
 // ============================================================
 
 expr : expr '||' expr                                          # ExprOr
@@ -119,7 +104,6 @@ expr : expr '||' expr                                          # ExprOr
      | expr ('*' | '/' | '%') expr                             # ExprMultiplicativa
      | '!' expr                                                # ExprNot
      | '-' expr                                                # ExprNegacion
-     | '+' expr                                                # ExprPos
      | '(' expr ')'                                            # ExprAgrupada
      | 'fmt.Println' '(' listaExpr? ')'                        # ExprFmtPrintln
      | 'nil'                                                   # ExprNil
@@ -127,36 +111,48 @@ expr : expr '||' expr                                          # ExprOr
      | ID '(' listaExpr? ')'                                   # ExprLlamada
      | '&' ID                                                  # ExprReferencia
      | '*' ID                                                  # ExprDeref
-     | ID ('+=' | '-=' | '*=' | '/=') expr                     # ExprAsignacionCompuesta
-     | ID ('++' | '--')                                        # ExprIncDec
-     | ID '=' listaExpr                                        # ExprAsignacion
+     | ID '=' listaExpr                                        # Asignacion
+     | ID ('+=' | '-=' | '*=' | '/=') expr                     # AsignacionCompuesta
+     | (ID | lvalue) ('++' | '--')                             # IncDecExpr
      | ID                                                      # ExprId
      | literal                                                 # ExprLiteral
      ;
+
+lvalue : ID ('[' expr ']')*;
 
 // ============================================================
 // LITERALES
 // ============================================================
 
-literal : INT_LIT                # LiteralEntero
-        | FLOAT_LIT              # LiteralFlotante
-        | BOOL_LIT               # LiteralBool
-        | RUNE_LIT               # LiteralRune
-        | STR_LIT                # LiteralString
+literal : LiteralEntero   
+        | LiteralFlotante 
+        | LiteralBool     
+        | LiteralRune     
+        | LiteralString   
         ;
+
+LiteralEntero : INT_LIT;
+
+LiteralFlotante : FLOAT_LIT;
+
+LiteralBool : BOOL_LIT;
+
+LiteralRune : RUNE_LIT;
+
+LiteralString : STR_LIT;
 
 // ============================================================
 // TOKENS (ORDEN IMPORTANTE - MÁS ESPECÍFICO PRIMERO)
 // ============================================================
 
 // Literales booleanos
-BOOL_LIT : 'true' | 'false';
+BOOL_LIT : 'true' | 'false' ;
 
 // Literales rune (carácter entre comillas simples)
-RUNE_LIT : '\'' ( ~['\\\r\n] | '\\' . ) '\'';
+RUNE_LIT : '\'' ( ~['\\\r\n] | '\\' . ) '\'' ;
 
 // Literales string (entre comillas dobles)
-STR_LIT : '"' ( ~["\\\r\n] | '\\' . )* '"';
+STR_LIT  : '"' ( ~["\\\r\n] | '\\' . )* '"' ;
 
 // Literales numéricos (FLOAT ANTES de INT - CRÍTICO)
 FLOAT_LIT : [0-9]+ '.' [0-9]+
@@ -164,15 +160,27 @@ FLOAT_LIT : [0-9]+ '.' [0-9]+
           | '.' [0-9]+
           ;
 
-INT_LIT : [0-9]+;
+INT_LIT  : [0-9]+ ;
 
-// Identificadores
-ID : [a-zA-Z_][a-zA-Z0-9_.]*;
+// Identificadores (incluyendo fmt.Println)
+ID : [a-zA-Z_][a-zA-Z0-9_.]* ;
 
-// Puntero
-STAR : '*';
+// Operadores simples
+STAR : '*' ;
+
+// Delimitadores
+LPAREN : '(' ;
+RPAREN : ')' ;
+LBRACE : '{' ;
+RBRACE : '}' ;
+LBRACKET : '[' ;
+RBRACKET : ']' ;
+COMMA : ',' ;
+SEMICOLON : ';' ;
+COLON : ':' ;
+DOT : '.' ;
 
 // Whitespace e ignorar
-WS : [ \t\r\n]+ -> skip;
-COMMENT : '//' ~[\r\n]* -> skip;
-BLOCK_COMMENT : '/*' .*? '*/' -> skip;
+WS : [ \t\r\n]+ -> skip ;
+COMMENT : '//' ~[\r\n]* -> skip ;
+BLOCK_COMMENT : '/*' .*? '*/' -> skip ;
