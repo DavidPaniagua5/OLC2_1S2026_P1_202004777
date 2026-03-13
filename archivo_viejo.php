@@ -14,11 +14,12 @@ use Context\{ExpressionVisitor as CtxExprVisitor, SentenciaExprContext,
              ExprIdContext, ExprLiteralContext, ExprReferenciaContext,
              ExprDerefContext, LiteralEnteroContext, LiteralFlotanteContext,
              LiteralBoolContext, LiteralRuneContext, LiteralStringContext,
-             AsignacionContext, AsignacionCompuestaContext, IncDecContext};
+             AsignacionContext, AsignacionCompuestaContext};
 
-use App\Env\{Result, Symbol, TiposSistema, Environment};
+use App\Env\{Result, Symbol, TiposSistema};
 use App\Expressions\BinaryOperator;
 use App\Utils\ValueFormatter;
+
 
 class ExpressionVisitor extends BaseVisitor
 {
@@ -34,6 +35,10 @@ class ExpressionVisitor extends BaseVisitor
         $this->binarioOp = new BinaryOperator($errores);
     }
 
+    // ==============================================================
+    // SENTENCIA EXPRESIÓN - Captura TODAS las expresiones/asignaciones
+    // ==============================================================
+
     public function visitSentenciaExpr(SentenciaExprContext $ctx): Result
     {
         $expr = $ctx->expr();
@@ -46,8 +51,13 @@ class ExpressionVisitor extends BaseVisitor
             return $this->visitAsignacionCompuesta($expr);
         }
         
+        // Si no, es una expresión normal
         return $this->visit($expr);
     }
+
+    // ==============================================================
+    // ASIGNACIONES
+    // ==============================================================
 
     public function visitAsignacion(AsignacionContext $ctx): Result
     {
@@ -79,6 +89,7 @@ class ExpressionVisitor extends BaseVisitor
                 continue;
             }
 
+            // Evaluar expresión
             $res = $this->visit($exprs[$i]);
 
             $tipoCompatible = $this->sonTiposCompatibles($sym->tipo, $res->tipo);
@@ -92,6 +103,7 @@ class ExpressionVisitor extends BaseVisitor
                 continue;
             }
 
+            // Asignar valor
             $sym->valor = ValueFormatter::castear($res, $sym->tipo);
         }
 
@@ -126,23 +138,9 @@ class ExpressionVisitor extends BaseVisitor
         return Result::nulo();
     }
 
-    public function visitIncDec(IncDecContext $ctx): Result
-    {
-        $nombre = $ctx->lvalue()->ID()->getText();
-
-        try {
-            $sym = $this->env->obtener($nombre);
-            if ($ctx->op->getText() === '++') {
-                $sym->valor++;
-            } else {
-                $sym->valor--;
-            }
-        } catch (\RuntimeException $e) {
-            $this->errores->agregar('Semántico', $e->getMessage());
-        }
-
-        return Result::nulo();
-    }
+    // ==============================================================
+    // DECLARACIONES
+    // ==============================================================
 
     public function visitVarDecl(VarDeclContext $ctx): Result
     {
@@ -274,6 +272,10 @@ class ExpressionVisitor extends BaseVisitor
         return Result::nulo();
     }
 
+    // ==============================================================
+    // LITERALES
+    // ==============================================================
+
     public function visitLiteralEntero(LiteralEnteroContext $ctx): Result
     {
         return new Result(Result::INT32, intval($ctx->INT_LIT()->getText()));
@@ -308,6 +310,10 @@ class ExpressionVisitor extends BaseVisitor
         return $this->visit($ctx->literal());
     }
 
+    // ==============================================================
+    // NULO E IDENTIFICADORES
+    // ==============================================================
+
     public function visitExprNil(ExprNilContext $ctx): Result
     {
         return Result::nulo();
@@ -330,10 +336,18 @@ class ExpressionVisitor extends BaseVisitor
         }
     }
 
+    // ==============================================================
+    // AGRUPACIÓN
+    // ==============================================================
+
     public function visitExprAgrupada(ExprAgrupadaContext $ctx): Result
     {
         return $this->visit($ctx->expr());
     }
+
+    // ==============================================================
+    // OPERADORES UNARIOS
+    // ==============================================================
 
     public function visitExprNegacion(ExprNegacionContext $ctx): Result
     {
@@ -368,6 +382,10 @@ class ExpressionVisitor extends BaseVisitor
         }
     }
 
+    // ==============================================================
+    // OPERADORES BINARIOS
+    // ==============================================================
+
     public function visitExprMultiplicativa(ExprMultiplicativaContext $ctx): Result
     {
         $izq = $this->visit($ctx->expr(0));
@@ -400,6 +418,10 @@ class ExpressionVisitor extends BaseVisitor
 
         return $this->binarioOp->aplicar($ctx->op->getText(), $izq, $der);
     }
+
+    // ==============================================================
+    // OPERADORES LÓGICOS CON CORTO CIRCUITO
+    // ==============================================================
 
     public function visitExprAnd(ExprAndContext $ctx): Result
     {
@@ -447,6 +469,10 @@ class ExpressionVisitor extends BaseVisitor
         return new Result(Result::BOOL, $der->valor);
     }
 
+    // ==============================================================
+    // fmt.Println
+    // ==============================================================
+
     public function visitExprFmtPrintln(ExprFmtPrintlnContext $ctx): Result
     {
         $partes = [];
@@ -460,295 +486,23 @@ class ExpressionVisitor extends BaseVisitor
         return Result::nulo();
     }
 
-    public function visitExprLlamada($ctx): Result
-    {
-        $nombreFuncion = $ctx->ID()->getText();
-        $args = [];
-        
-        if ($ctx->listaExpr() !== null) {
-            foreach ($ctx->listaExpr()->expr() as $expr) {
-                $args[] = $this->visit($expr);
-            }
-        }
-        
-        try {
-            $fnSymbol = $this->envGlobal->obtener($nombreFuncion);
-        } catch (\RuntimeException $e) {
-            $this->errores->agregar(
-                'Semántico',
-                "Función '{$nombreFuncion}' no declarada.",
-                $ctx->ID()->getSymbol()->getLine(),
-                $ctx->ID()->getSymbol()->getCharPositionInLine()
-            );
-            return Result::nulo();
-        }
-
-        if ($fnSymbol->clase !== Symbol::CLASE_FUNCION) {
-            $this->errores->agregar(
-                'Semántico',
-                "'{$nombreFuncion}' no es una función.",
-                $ctx->ID()->getSymbol()->getLine(),
-                $ctx->ID()->getSymbol()->getCharPositionInLine()
-            );
-            return Result::nulo();
-        }
-        
-        return Result::nulo();
-    }
-
-    public function visitSentenciaSwitch($ctx): Result
-    {
-        $exprSwitch = $this->visit($ctx->expr());
-        
-        $casos = $ctx->casoSwitch();
-        $default = $ctx->defaultSwitch();
-        
-        $encontrado = false;
-        $casoEjecutar = null;
-        
-        foreach ($casos as $caso) {
-            $listaExprCaso = $caso->listaExpr();
-            
-            if ($listaExprCaso !== null) {
-                foreach ($listaExprCaso->expr() as $exprCaso) {
-                    $valCaso = $this->visit($exprCaso);
-                    
-                    if ($exprSwitch->valor == $valCaso->valor && 
-                        $exprSwitch->tipo === $valCaso->tipo) {
-                        $encontrado = true;
-                        $casoEjecutar = $caso;
-                        break 2;
-                    }
-                }
-            }
-        }
-        
-        if ($encontrado && $casoEjecutar !== null) {
-            foreach ($casoEjecutar->sentencia() as $sent) {
-                $resultado = $this->visit($sent);
-                
-                if ($resultado !== null && $resultado->esBreak) {
-                    break;
-                }
-            }
-        } elseif ($default !== null) {
-            foreach ($default->sentencia() as $sent) {
-                $resultado = $this->visit($sent);
-                
-                if ($resultado !== null && $resultado->esBreak) {
-                    break;
-                }
-            }
-        }
-        
-        return Result::nulo();
-    }
-
-    public function visitExprIndiceArreglo($ctx): Result
-    {
-        return Result::nulo();
-    }
-
-    public function visitSentenciaIf($ctx): Result
-    {
-        $cond = $this->visit($ctx->expr());
-        
-        if ($cond->tipo !== Result::BOOL) {
-            $this->errores->agregar(
-                'Semántico',
-                "La condición del 'if' debe ser bool, se obtuvo '{$cond->tipo}'.",
-                $ctx->expr()->getStart()->getLine(),
-                $ctx->expr()->getStart()->getCharPositionInLine()
-            );
-            return Result::nulo();
-        }
-        
-        if ($cond->valor) {
-            $bloque = $ctx->bloque(0);
-            return $this->visitBloque($bloque);
-        } else {
-            $bloques = $ctx->bloque();
-            
-            if (count($bloques) > 1) {
-                return $this->visitBloque($bloques[1]);
-            }
-        }
-        
-        return Result::nulo();
-    }
-
-    public function visitForClassico($ctx): Result
-    {
-        $envAnterior = $this->env;
-        $this->env = new Environment($envAnterior);
-        
-        if ($ctx->declCorta() !== null) {
-            $this->visit($ctx->declCorta());
-        }
-        
-        $resultado = Result::nulo();
-        
-        while (true) {
-            $cond = $this->visit($ctx->expr());
-            
-            if ($cond->tipo !== Result::BOOL) {
-                $this->errores->agregar('Semántico', "Condición del for debe ser bool.");
-                break;
-            }
-            
-            if (!$cond->valor) {
-                break;
-            }
-            
-            $resultado = $this->visitBloque($ctx->bloque());
-            
-            if ($resultado !== null) {
-                if ($resultado->esBreak) {
-                    $resultado = Result::nulo();
-                    break;
-                }
-                if ($resultado->esContinue) {
-                    $resultado = Result::nulo();
-                }
-                if ($resultado->esReturn) {
-                    break;
-                }
-            }
-            
-            if ($ctx->incDec() !== null) {
-                $this->visit($ctx->incDec());
-            } elseif ($ctx->asignacionCompuesta() !== null) {
-                $this->visit($ctx->asignacionCompuesta());
-            }
-        }
-        
-        $this->env = $envAnterior;
-        return $resultado;
-    }
-
-    public function visitForWhile($ctx): Result
-    {
-        $resultado = Result::nulo();
-        
-        while (true) {
-            $cond = $this->visit($ctx->expr());
-            
-            if ($cond->tipo !== Result::BOOL) {
-                $this->errores->agregar('Semántico', "Condición del for debe ser bool.");
-                break;
-            }
-            
-            if (!$cond->valor) {
-                break;
-            }
-            
-            $resultado = $this->visitBloque($ctx->bloque());
-            
-            if ($resultado !== null) {
-                if ($resultado->esBreak) {
-                    $resultado = Result::nulo();
-                    break;
-                }
-                if ($resultado->esContinue) {
-                    $resultado = Result::nulo();
-                }
-                if ($resultado->esReturn) {
-                    break;
-                }
-            }
-        }
-        
-        return $resultado;
-    }
-
-    public function visitForInfinito($ctx): Result
-    {
-        $resultado = Result::nulo();
-        
-        while (true) {
-            $resultado = $this->visitBloque($ctx->bloque());
-            
-            if ($resultado !== null) {
-                if ($resultado->esBreak) {
-                    $resultado = Result::nulo();
-                    break;
-                }
-                if ($resultado->esContinue) {
-                    $resultado = Result::nulo();
-                }
-                if ($resultado->esReturn) {
-                    break;
-                }
-            }
-        }
-        
-        return $resultado;
-    }
-
-    public function visitSentenciaReturn($ctx): Result
-    {
-        $res = Result::nulo();
-        $res->esReturn = true;
-        return $res;
-    }
-
-    public function visitSentenciaBreak($ctx): Result
-    {
-        $res = Result::nulo();
-        $res->esBreak = true;
-        return $res;
-    }
-
-    public function visitSentenciaContinue($ctx): Result
-    {
-        $res = Result::nulo();
-        $res->esContinue = true;
-        return $res;
-    }
-
-    public function visitBloque($ctx): Result
-    {
-        $envAnterior = $this->env;
-        $this->env = new Environment($envAnterior);
-
-        $resultado = Result::nulo();
-        
-        foreach ($ctx->sentencia() as $sent) {
-            $visitor = new ExpressionVisitor(
-                $this->envGlobal,
-                $this->env,
-                $this->errores,
-                $this->ambitoActual
-            );
-            
-            $resultado = $visitor->visit($sent);
-            
-            $this->consola .= $visitor->obtenerConsola();
-            
-            $simbolos = $visitor->obtenerRegistroSimbolos();
-            foreach ($simbolos as $sym) {
-                // Registrar símbolos si es necesario
-            }
-
-            if ($resultado !== null && ($resultado->esReturn || $resultado->esBreak || $resultado->esContinue)) {
-                break;
-            }
-        }
-
-        $this->env = $envAnterior;
-        return $resultado;
-    }
+    // ==============================================================
+    // HELPER: Validación de Tipos
+    // ==============================================================
 
     private function sonTiposCompatibles(string $tipoDest, string $tipoOrigen): bool
     {
+        // Mismo tipo
         if ($tipoDest === $tipoOrigen) {
             return true;
         }
 
+        // nil con cualquier tipo
         if ($tipoOrigen === Result::NIL) {
             return true;
         }
 
+        // No compatible
         return false;
     }
 }

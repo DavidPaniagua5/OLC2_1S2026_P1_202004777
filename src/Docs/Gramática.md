@@ -1,3 +1,6 @@
+# Gramática
+
+~~~php
 grammar Grammar;
 
 // ============================================================
@@ -39,30 +42,28 @@ tipoBase : 'int32'
 
 declaracion : varDecl | constDecl | declCorta;
 
-// MODIFICADO: Soporte para inicialización de arreglos
-varDecl : 'var' listaIds tipo ('=' arregloInit)?
-        | 'var' listaIds tipo ('=' listaExpr)?;
+varDecl : 'var' listaIds tipo initVal?;
+
+initVal : '=' initExpr;
+
+initExpr : listaExpr | arregloInit;
 
 constDecl : 'const' ID tipo '=' expr;
 
-// MODIFICADO: Soporte para inicialización de arreglos
-declCorta : listaIds ':=' arregloInit
-          | listaIds ':=' listaExpr;
+declCorta : listaIds ':=' listaExpr;
 
 listaIds : ID (',' ID)*;
 
 listaExpr : expr (',' expr)*;
 
 // ============================================================
-// INICIALIZACIÓN DE ARREGLOS (NUEVA SECCIÓN)
+// INICIALIZACIÓN DE ARREGLOS
 // ============================================================
 
-// Regla para inicializar arreglos:
-arregloInit : ('[' INT_LIT ']')+ tipoBase '{' filasMatriz? '}' ;
-filasMatriz : fila (',' fila)*;
+arregloInit : '[' INT_LIT ']' tipoBase '{' initListaExpr? '}' 
+            | '[' INT_LIT ']' tipoBase '{' inicioMatriz '}';
 
-fila : '{' initListaExpr? '}' 
-     | initListaExpr;
+inicioMatriz : '{' initListaExpr? '}' (',' '{' initListaExpr? '}')*;
 
 initListaExpr : expr (',' expr)* ','?;
 
@@ -89,7 +90,7 @@ sentenciaIf : 'if' expr bloque ('else' bloque)?;
 
 sentenciaFor : 'for' (forClassico | forWhile | forInfinito);
 
-forClassico : declCorta ';' expr ';' expr bloque;
+forClassico : declCorta ';' expr ';' (incDec | asignacionCompuesta) bloque;
 
 forWhile : expr bloque;
 
@@ -128,11 +129,13 @@ expr : expr '||' expr                                          # ExprOr
      | '&' ID                                                  # ExprReferencia
      | '*' ID                                                  # ExprDeref
      | ID ('+=' | '-=' | '*=' | '/=') expr                     # ExprAsignacionCompuesta
-     | ID ('++' | '--')                                        # ExprIncDec
+     | ID incDecOp                                             # ExprIncDec
      | ID '=' listaExpr                                        # ExprAsignacion
      | ID                                                      # ExprId
      | literal                                                 # ExprLiteral
      ;
+
+incDecOp : '++' | '--';
 
 // ============================================================
 // LITERALES
@@ -176,3 +179,5 @@ STAR : '*';
 WS : [ \t\r\n]+ -> skip;
 COMMENT : '//' ~[\r\n]* -> skip;
 BLOCK_COMMENT : '/*' .*? '*/' -> skip;
+
+~~~
