@@ -2,61 +2,24 @@
 
 namespace App\Visitors;
 
-// Importar todos los contextos ANTLR sin namespace Context
-use SentenciaExprContext;
-use VarDeclContext;
-use ConstDeclContext;
-use DeclCortaContext;
-use SentenciaIfContext;
-use SentenciaForContext;
-use ForClassicoContext;
-use ForWhileContext;
-use ForInfinitoContext;
-use SentenciaSwitchContext;
-use SentenciaBreakContext;
-use SentenciaContinueContext;
-use SentenciaReturnContext;
-use ExprOrContext;
-use ExprAndContext;
-use ExprIgualdadContext;
-use ExprRelacionalContext;
-use ExprAditivaContext;
-use ExprMultiplicativaContext;
-use ExprNotContext;
-use ExprNegacionContext;
-use ExprAgrupadaContext;
-use ExprFmtPrintlnContext;
-use ExprNilContext;
-use ExprIdContext;
-use ExprLiteralContext;
-use ExprReferenciaContext;
-use ExprDerefContext;
-use LiteralEnteroContext;
-use LiteralFlotanteContext;
-use LiteralBoolContext;
-use LiteralRuneContext;
-use LiteralStringContext;
-use AsignacionContext;
-use AsignacionCompuestaContext;
-use IncDecContext;
-use ExprIndiceArregloContext;
-use ExprLlamadaContext;
-use BloqueContext;
-use CasoSwitchContext;
-use DefaultSwitchContext;
+use Context\{ExpressionVisitor as CtxExprVisitor, SentenciaExprContext,
+             VarDeclContext, ConstDeclContext, DeclCortaContext,
+             SentenciaIfContext, SentenciaForContext, ForClassicoContext,
+             ForWhileContext, ForInfinitoContext, SentenciaSwitchContext,
+             SentenciaBreakContext, SentenciaContinueContext,
+             SentenciaReturnContext, ExprOrContext, ExprAndContext,
+             ExprIgualdadContext, ExprRelacionalContext, ExprAditivaContext,
+             ExprMultiplicativaContext, ExprNotContext, ExprNegacionContext,
+             ExprAgrupadaContext, ExprFmtPrintlnContext, ExprNilContext,
+             ExprIdContext, ExprLiteralContext, ExprReferenciaContext,
+             ExprDerefContext, LiteralEnteroContext, LiteralFlotanteContext,
+             LiteralBoolContext, LiteralRuneContext, LiteralStringContext,
+             AsignacionContext, AsignacionCompuestaContext, IncDecContext};
 
 use App\Env\{Result, Symbol, TiposSistema, Environment};
 use App\Expressions\BinaryOperator;
 use App\Utils\ValueFormatter;
 
-/**
- * Visitor para evaluar expresiones en el lenguaje Golampi.
- * Maneja:
- * - Operadores binarios y unarios
- * - Acceso a variables y arreglos (incluyendo multidimensionales)
- * - Llamadas a funciones
- * - Literales y construcciones de control
- */
 class ExpressionVisitor extends BaseVisitor
 {
     private BinaryOperator $binarioOp;
@@ -71,82 +34,22 @@ class ExpressionVisitor extends BaseVisitor
         $this->binarioOp = new BinaryOperator($errores);
     }
 
-    // ============================================================
-    // MÉTODOS AUXILIARES PARA ARREGLOS MULTIDIMENSIONALES (NUEVOS)
-    // ============================================================
-
-    /**
-     * Extrae el tipo de elemento de un tipo de arreglo.
-     */
-    private function extraerTipoElemento(string $tipoArreglo): string
-    {
-        if (preg_match('/^\[(\d+)\](.+)$/', $tipoArreglo, $matches)) {
-            return $matches[2];
-        }
-        return $tipoArreglo;
-    }
-
-    /**
-     * Extrae todas las dimensiones de un tipo de arreglo.
-     */
-    private function obtenerDimensiones(string $tipoArreglo): array
-    {
-        $dimensiones = [];
-
-        while (preg_match('/^\[(\d+)\]/', $tipoArreglo, $matches)) {
-            $dimensiones[] = (int)$matches[1];
-            $tipoArreglo = substr($tipoArreglo, strlen($matches[0]));
-        }
-
-        return [
-            'dimensiones' => $dimensiones,
-            'tipoBase'    => $tipoArreglo
-        ];
-    }
-
-    /**
-     * Crea un arreglo multidimensional con valores por defecto.
-     */
-    private function crearArregloMultidimensional(
-        array $dimensiones,
-        string $tipoBase
-    ): mixed {
-        if (empty($dimensiones)) {
-            return TiposSistema::valorDefecto($tipoBase);
-        }
-
-        $tamano = array_shift($dimensiones);
-        $valorPorDefecto = empty($dimensiones)
-            ? TiposSistema::valorDefecto($tipoBase)
-            : $this->crearArregloMultidimensional($dimensiones, $tipoBase);
-
-        return array_fill(0, $tamano, $valorPorDefecto);
-    }
-
-    // ============================================================
-    // SENTENCIAS DE EXPRESIÓN
-    // ============================================================
-
-    public function visitSentenciaExpr($ctx): Result
+    public function visitSentenciaExpr(SentenciaExprContext $ctx): Result
     {
         $expr = $ctx->expr();
-
+        
         if ($expr instanceof AsignacionContext) {
             return $this->visitAsignacion($expr);
         }
-
+        
         if ($expr instanceof AsignacionCompuestaContext) {
             return $this->visitAsignacionCompuesta($expr);
         }
-
+        
         return $this->visit($expr);
     }
 
-    // ============================================================
-    // ASIGNACIONES
-    // ============================================================
-
-    public function visitAsignacion($ctx): Result
+    public function visitAsignacion(AsignacionContext $ctx): Result
     {
         $lvalues = $ctx->listaLvalue()->lvalue();
         $exprs   = $ctx->listaExpr()->expr();
@@ -178,7 +81,6 @@ class ExpressionVisitor extends BaseVisitor
 
             $res = $this->visit($exprs[$i]);
 
-            // Manejo de índices multidimensionales
             if ($lv->expr() !== null && count($lv->expr()) > 0) {
                 if (!is_array($sym->valor)) {
                     $this->errores->agregar(
@@ -187,15 +89,10 @@ class ExpressionVisitor extends BaseVisitor
                     );
                     continue;
                 }
-
-                // Procesar múltiples índices
-                $referencia = &$sym->valor;
-                $tipoActual = $sym->tipo;
-                $indicesCount = count($lv->expr());
-
-                foreach ($lv->expr() as $j => $indiceExpr) {
+                
+                foreach ($lv->expr() as $indiceExpr) {
                     $indiceRes = $this->visit($indiceExpr);
-
+                    
                     if ($indiceRes->tipo !== Result::INT32) {
                         $this->errores->agregar(
                             'Semántico',
@@ -203,33 +100,20 @@ class ExpressionVisitor extends BaseVisitor
                         );
                         continue 2;
                     }
-
+                    
                     $indice = (int)$indiceRes->valor;
-
-                    if (!isset($referencia[$indice])) {
+                    
+                    if (!isset($sym->valor[$indice])) {
                         $this->errores->agregar(
                             'Semántico',
                             "Índice '{$indice}' fuera de rango."
                         );
                         continue 2;
                     }
-
-                    // Si es el último índice, asignar
-                    if ($j === $indicesCount - 1) {
-                        $tipoElemento = $this->extraerTipoElemento($tipoActual);
-                        $referencia[$indice] = ValueFormatter::castear($res, $tipoElemento);
-                    } else {
-                        // Si no es el último, descender a la siguiente dimensión
-                        if (!is_array($referencia[$indice])) {
-                            $this->errores->agregar('Semántico', "No se puede indexar más.");
-                            continue 2;
-                        }
-                        $referencia = &$referencia[$indice];
-                        $tipoActual = $this->extraerTipoElemento($tipoActual);
-                    }
+                    
+                    $sym->valor[$indice] = ValueFormatter::castear($res, $sym->tipo);
                 }
             } else {
-                // Asignación simple sin índices
                 $tipoCompatible = $this->sonTiposCompatibles($sym->tipo, $res->tipo);
                 if (!$tipoCompatible) {
                     $this->errores->agregar(
@@ -248,7 +132,7 @@ class ExpressionVisitor extends BaseVisitor
         return Result::nulo();
     }
 
-    public function visitAsignacionCompuesta($ctx): Result
+    public function visitAsignacionCompuesta(AsignacionCompuestaContext $ctx): Result
     {
         $nombre = $ctx->lvalue()->ID()->getText();
 
@@ -276,7 +160,7 @@ class ExpressionVisitor extends BaseVisitor
         return Result::nulo();
     }
 
-    public function visitIncDec($ctx): Result
+    public function visitIncDec(IncDecContext $ctx): Result
     {
         $nombre = $ctx->lvalue()->ID()->getText();
 
@@ -294,14 +178,8 @@ class ExpressionVisitor extends BaseVisitor
         return Result::nulo();
     }
 
-    // ============================================================
-    // DECLARACIONES
-    // ============================================================
-
-    public function visitVarDecl($ctx): Result
+    public function visitVarDecl(VarDeclContext $ctx): Result
     {
-        if ($ctx === null) return Result::nulo();
-        
         $tipo  = $ctx->tipo()->getText();
         $ids   = $ctx->listaIds()->ID();
         $exprs = $ctx->listaExpr() !== null ? $ctx->listaExpr()->expr() : [];
@@ -320,8 +198,8 @@ class ExpressionVisitor extends BaseVisitor
             }
 
             if (isset($exprs[$i])) {
-                $res = $this->visit($exprs[$i]);
-
+                $res   = $this->visit($exprs[$i]);
+                
                 if ($res->tipo !== Result::NIL && $res->tipo !== $tipo) {
                     $this->errores->agregar(
                         'Semántico',
@@ -331,10 +209,10 @@ class ExpressionVisitor extends BaseVisitor
                     );
                     continue;
                 }
-
+                
                 $valor = ValueFormatter::castear($res, $tipo);
             } else {
-                $valor = $this->generarValorDefecto($tipo);
+                $valor = TiposSistema::valorDefecto($tipo);
             }
 
             $sym = new Symbol($tipo, $valor, Symbol::CLASE_VARIABLE, 0, 0);
@@ -350,7 +228,7 @@ class ExpressionVisitor extends BaseVisitor
         return Result::nulo();
     }
 
-    public function visitConstDecl($ctx): Result
+    public function visitConstDecl(ConstDeclContext $ctx): Result
     {
         $nombre = $ctx->ID()->getText();
         $tipo   = $ctx->tipo()->getText();
@@ -381,7 +259,7 @@ class ExpressionVisitor extends BaseVisitor
         return Result::nulo();
     }
 
-    public function visitDeclCorta($ctx): Result
+    public function visitDeclCorta(DeclCortaContext $ctx): Result
     {
         $ids   = $ctx->listaIds()->ID();
         $exprs = $ctx->listaExpr()->expr();
@@ -430,54 +308,46 @@ class ExpressionVisitor extends BaseVisitor
         return Result::nulo();
     }
 
-    // ============================================================
-    // LITERALES
-    // ============================================================
-
-    public function visitLiteralEntero($ctx): Result
+    public function visitLiteralEntero(LiteralEnteroContext $ctx): Result
     {
         return new Result(Result::INT32, intval($ctx->INT_LIT()->getText()));
     }
 
-    public function visitLiteralFlotante($ctx): Result
+    public function visitLiteralFlotante(LiteralFlotanteContext $ctx): Result
     {
         return new Result(Result::FLOAT32, floatval($ctx->FLOAT_LIT()->getText()));
     }
 
-    public function visitLiteralBool($ctx): Result
+    public function visitLiteralBool(LiteralBoolContext $ctx): Result
     {
         return new Result(Result::BOOL, $ctx->BOOL_LIT()->getText() === 'true');
     }
 
-    public function visitLiteralRune($ctx): Result
+    public function visitLiteralRune(LiteralRuneContext $ctx): Result
     {
         $texto = $ctx->RUNE_LIT()->getText();
         $char  = stripslashes(substr($texto, 1, -1));
         return new Result(Result::RUNE, mb_ord($char));
     }
 
-    public function visitLiteralString($ctx): Result
+    public function visitLiteralString(LiteralStringContext $ctx): Result
     {
         $texto = $ctx->STR_LIT()->getText();
         $str   = stripcslashes(substr($texto, 1, -1));
         return new Result(Result::STRING, $str);
     }
 
-    public function visitExprLiteral($ctx): Result
+    public function visitExprLiteral(ExprLiteralContext $ctx): Result
     {
         return $this->visit($ctx->literal());
     }
 
-    public function visitExprNil($ctx): Result
+    public function visitExprNil(ExprNilContext $ctx): Result
     {
         return Result::nulo();
     }
 
-    // ============================================================
-    // IDENTIFICADORES Y REFERENCIAS
-    // ============================================================
-
-    public function visitExprId($ctx): Result
+    public function visitExprId(ExprIdContext $ctx): Result
     {
         $nombre = $ctx->ID()->getText();
         try {
@@ -494,12 +364,34 @@ class ExpressionVisitor extends BaseVisitor
         }
     }
 
-    public function visitExprReferencia($ctx): Result
+    public function visitExprAgrupada(ExprAgrupadaContext $ctx): Result
+    {
+        return $this->visit($ctx->expr());
+    }
+
+    public function visitExprNegacion(ExprNegacionContext $ctx): Result
+    {
+        $val = $this->visit($ctx->expr());
+        if ($val->tipo === Result::NIL) return Result::nulo();
+        return new Result($val->tipo, -$val->valor);
+    }
+
+    public function visitExprNot(ExprNotContext $ctx): Result
+    {
+        $val = $this->visit($ctx->expr());
+        if ($val->tipo !== Result::BOOL) {
+            $this->errores->agregar('Semántico', "El operador '!' requiere bool.");
+            return Result::nulo();
+        }
+        return new Result(Result::BOOL, !$val->valor);
+    }
+
+    public function visitExprReferencia(ExprReferenciaContext $ctx): Result
     {
         return new Result(Result::STRING, '&' . $ctx->ID()->getText());
     }
 
-    public function visitExprDeref($ctx): Result
+    public function visitExprDeref(ExprDerefContext $ctx): Result
     {
         $nombre = $ctx->ID()->getText();
         try {
@@ -510,53 +402,28 @@ class ExpressionVisitor extends BaseVisitor
         }
     }
 
-    // ============================================================
-    // OPERADORES UNARIOS
-    // ============================================================
-
-    public function visitExprNot($ctx): Result
-    {
-        $val = $this->visit($ctx->expr());
-        if ($val->tipo !== Result::BOOL) {
-            $this->errores->agregar('Semántico', "El operador '!' requiere bool.");
-            return Result::nulo();
-        }
-        return new Result(Result::BOOL, !$val->valor);
-    }
-
-    public function visitExprNegacion($ctx): Result
-    {
-        $val = $this->visit($ctx->expr());
-        if ($val->tipo === Result::NIL) return Result::nulo();
-        return new Result($val->tipo, -$val->valor);
-    }
-
-    // ============================================================
-    // OPERADORES BINARIOS
-    // ============================================================
-
-    public function visitExprMultiplicativa($ctx): Result
+    public function visitExprMultiplicativa(ExprMultiplicativaContext $ctx): Result
     {
         $izq = $this->visit($ctx->expr(0));
         $der = $this->visit($ctx->expr(1));
         return $this->binarioOp->aplicar($ctx->op->getText(), $izq, $der);
     }
 
-    public function visitExprAditiva($ctx): Result
+    public function visitExprAditiva(ExprAditivaContext $ctx): Result
     {
         $izq = $this->visit($ctx->expr(0));
         $der = $this->visit($ctx->expr(1));
         return $this->binarioOp->aplicar($ctx->op->getText(), $izq, $der);
     }
 
-    public function visitExprRelacional($ctx): Result
+    public function visitExprRelacional(ExprRelacionalContext $ctx): Result
     {
         $izq = $this->visit($ctx->expr(0));
         $der = $this->visit($ctx->expr(1));
         return $this->binarioOp->aplicar($ctx->op->getText(), $izq, $der);
     }
 
-    public function visitExprIgualdad($ctx): Result
+    public function visitExprIgualdad(ExprIgualdadContext $ctx): Result
     {
         $izq = $this->visit($ctx->expr(0));
         $der = $this->visit($ctx->expr(1));
@@ -568,7 +435,7 @@ class ExpressionVisitor extends BaseVisitor
         return $this->binarioOp->aplicar($ctx->op->getText(), $izq, $der);
     }
 
-    public function visitExprAnd($ctx): Result
+    public function visitExprAnd(ExprAndContext $ctx): Result
     {
         $izq = $this->visit($ctx->expr(0));
 
@@ -591,7 +458,7 @@ class ExpressionVisitor extends BaseVisitor
         return new Result(Result::BOOL, $der->valor);
     }
 
-    public function visitExprOr($ctx): Result
+    public function visitExprOr(ExprOrContext $ctx): Result
     {
         $izq = $this->visit($ctx->expr(0));
 
@@ -614,16 +481,7 @@ class ExpressionVisitor extends BaseVisitor
         return new Result(Result::BOOL, $der->valor);
     }
 
-    public function visitExprAgrupada($ctx): Result
-    {
-        return $this->visit($ctx->expr());
-    }
-
-    // ============================================================
-    // FUNCIONES EMBEBIDAS Y LLAMADAS
-    // ============================================================
-
-    public function visitExprFmtPrintln($ctx): Result
+    public function visitExprFmtPrintln(ExprFmtPrintlnContext $ctx): Result
     {
         $partes = [];
         if ($ctx->listaExpr() !== null) {
@@ -640,13 +498,13 @@ class ExpressionVisitor extends BaseVisitor
     {
         $nombreFuncion = $ctx->ID()->getText();
         $args = [];
-
+        
         if ($ctx->listaExpr() !== null) {
             foreach ($ctx->listaExpr()->expr() as $expr) {
                 $args[] = $this->visit($expr);
             }
         }
-
+        
         try {
             $fnSymbol = $this->envGlobal->obtener($nombreFuncion);
         } catch (\RuntimeException $e) {
@@ -668,19 +526,63 @@ class ExpressionVisitor extends BaseVisitor
             );
             return Result::nulo();
         }
-
+        
         return Result::nulo();
     }
 
-    // ============================================================
-    // ACCESO A ARREGLOS (MEJORADO PARA MULTIDIMENSIONALIDAD)
-    // ============================================================
+    public function visitSentenciaSwitch($ctx): Result
+    {
+        $exprSwitch = $this->visit($ctx->expr());
+        
+        $casos = $ctx->casoSwitch();
+        $default = $ctx->defaultSwitch();
+        
+        $encontrado = false;
+        $casoEjecutar = null;
+        
+        foreach ($casos as $caso) {
+            $listaExprCaso = $caso->listaExpr();
+            
+            if ($listaExprCaso !== null) {
+                foreach ($listaExprCaso->expr() as $exprCaso) {
+                    $valCaso = $this->visit($exprCaso);
+                    
+                    if ($exprSwitch->valor == $valCaso->valor && 
+                        $exprSwitch->tipo === $valCaso->tipo) {
+                        $encontrado = true;
+                        $casoEjecutar = $caso;
+                        break 2;
+                    }
+                }
+            }
+        }
+        
+        if ($encontrado && $casoEjecutar !== null) {
+            foreach ($casoEjecutar->sentencia() as $sent) {
+                $resultado = $this->visit($sent);
+                
+                if ($resultado !== null && $resultado->esBreak) {
+                    break;
+                }
+            }
+        } elseif ($default !== null) {
+            foreach ($default->sentencia() as $sent) {
+                $resultado = $this->visit($sent);
+                
+                if ($resultado !== null && $resultado->esBreak) {
+                    break;
+                }
+            }
+        }
+        
+        return Result::nulo();
+    }
 
     public function visitExprIndiceArreglo($ctx): Result
     {
         $nombreArreglo = $ctx->ID()->getText();
-        $indicesCtx = $ctx->expr();
-
+        $indiceCtx = $ctx->expr();
+        
         try {
             $sym = $this->env->obtener($nombreArreglo);
         } catch (\RuntimeException $e) {
@@ -692,7 +594,21 @@ class ExpressionVisitor extends BaseVisitor
             );
             return Result::nulo();
         }
-
+        
+        $indiceRes = $this->visit($indiceCtx);
+        
+        if ($indiceRes->tipo !== Result::INT32) {
+            $this->errores->agregar(
+                'Semántico',
+                "Índice debe ser int32, se obtuvo '{$indiceRes->tipo}'.",
+                $indiceCtx->getStart()->getLine(),
+                $indiceCtx->getStart()->getCharPositionInLine()
+            );
+            return Result::nulo();
+        }
+        
+        $indice = (int)$indiceRes->valor;
+        
         if (!is_array($sym->valor)) {
             $this->errores->agregar(
                 'Semántico',
@@ -700,51 +616,23 @@ class ExpressionVisitor extends BaseVisitor
             );
             return Result::nulo();
         }
-
-        $valor = $sym->valor;
-        $tipoActual = $sym->tipo;
-
-        // Procesar CADA índice secuencialmente
-        foreach ($indicesCtx as $indiceCtx) {
-            $indiceRes = $this->visit($indiceCtx);
-
-            if ($indiceRes->tipo !== Result::INT32) {
-                $this->errores->agregar(
-                    'Semántico',
-                    "Índice debe ser int32, se obtuvo '{$indiceRes->tipo}'.",
-                    $indiceCtx->getStart()->getLine(),
-                    $indiceCtx->getStart()->getCharPositionInLine()
-                );
-                return Result::nulo();
-            }
-
-            $indice = (int)$indiceRes->valor;
-
-            if (!isset($valor[$indice])) {
-                $this->errores->agregar(
-                    'Semántico',
-                    "Índice '{$indice}' fuera de rango para arreglo '{$nombreArreglo}'."
-                );
-                return Result::nulo();
-            }
-
-            $valor = $valor[$indice];
-
-            // IMPORTANTE: Actualizar tipo para la siguiente dimensión
-            $tipoActual = $this->extraerTipoElemento($tipoActual);
+        
+        if (!isset($sym->valor[$indice])) {
+            $this->errores->agregar(
+                'Semántico',
+                "Índice '{$indice}' fuera de rango para arreglo '{$nombreArreglo}'."
+            );
+            return Result::nulo();
         }
-
-        return new Result($tipoActual, $valor);
+        
+        $valor = $sym->valor[$indice];
+        return new Result($sym->tipo, $valor);
     }
-
-    // ============================================================
-    // SENTENCIAS DE CONTROL DE FLUJO
-    // ============================================================
 
     public function visitSentenciaIf($ctx): Result
     {
         $cond = $this->visit($ctx->expr());
-
+        
         if ($cond->tipo !== Result::BOOL) {
             $this->errores->agregar(
                 'Semántico',
@@ -754,18 +642,18 @@ class ExpressionVisitor extends BaseVisitor
             );
             return Result::nulo();
         }
-
+        
         if ($cond->valor) {
             $bloque = $ctx->bloque(0);
             return $this->visitBloque($bloque);
         } else {
             $bloques = $ctx->bloque();
-
+            
             if (count($bloques) > 1) {
                 return $this->visitBloque($bloques[1]);
             }
         }
-
+        
         return Result::nulo();
     }
 
@@ -773,27 +661,27 @@ class ExpressionVisitor extends BaseVisitor
     {
         $envAnterior = $this->env;
         $this->env = new Environment($envAnterior);
-
+        
         if ($ctx->declCorta() !== null) {
             $this->visit($ctx->declCorta());
         }
-
+        
         $resultado = Result::nulo();
-
+        
         while (true) {
             $cond = $this->visit($ctx->expr());
-
+            
             if ($cond->tipo !== Result::BOOL) {
                 $this->errores->agregar('Semántico', "Condición del for debe ser bool.");
                 break;
             }
-
+            
             if (!$cond->valor) {
                 break;
             }
-
+            
             $resultado = $this->visitBloque($ctx->bloque());
-
+            
             if ($resultado !== null) {
                 if ($resultado->esBreak) {
                     $resultado = Result::nulo();
@@ -806,14 +694,14 @@ class ExpressionVisitor extends BaseVisitor
                     break;
                 }
             }
-
+            
             if ($ctx->incDec() !== null) {
                 $this->visit($ctx->incDec());
             } elseif ($ctx->asignacionCompuesta() !== null) {
                 $this->visit($ctx->asignacionCompuesta());
             }
         }
-
+        
         $this->env = $envAnterior;
         return $resultado;
     }
@@ -821,21 +709,21 @@ class ExpressionVisitor extends BaseVisitor
     public function visitForWhile($ctx): Result
     {
         $resultado = Result::nulo();
-
+        
         while (true) {
             $cond = $this->visit($ctx->expr());
-
+            
             if ($cond->tipo !== Result::BOOL) {
                 $this->errores->agregar('Semántico', "Condición del for debe ser bool.");
                 break;
             }
-
+            
             if (!$cond->valor) {
                 break;
             }
-
+            
             $resultado = $this->visitBloque($ctx->bloque());
-
+            
             if ($resultado !== null) {
                 if ($resultado->esBreak) {
                     $resultado = Result::nulo();
@@ -849,17 +737,17 @@ class ExpressionVisitor extends BaseVisitor
                 }
             }
         }
-
+        
         return $resultado;
     }
 
     public function visitForInfinito($ctx): Result
     {
         $resultado = Result::nulo();
-
+        
         while (true) {
             $resultado = $this->visitBloque($ctx->bloque());
-
+            
             if ($resultado !== null) {
                 if ($resultado->esBreak) {
                     $resultado = Result::nulo();
@@ -873,56 +761,8 @@ class ExpressionVisitor extends BaseVisitor
                 }
             }
         }
-
+        
         return $resultado;
-    }
-
-    public function visitSentenciaSwitch($ctx): Result
-    {
-        $exprSwitch = $this->visit($ctx->expr());
-
-        $casos = $ctx->casoSwitch();
-        $default = $ctx->defaultSwitch();
-
-        $encontrado = false;
-        $casoEjecutar = null;
-
-        foreach ($casos as $caso) {
-            $listaExprCaso = $caso->listaExpr();
-
-            if ($listaExprCaso !== null) {
-                foreach ($listaExprCaso->expr() as $exprCaso) {
-                    $valCaso = $this->visit($exprCaso);
-
-                    if ($exprSwitch->valor == $valCaso->valor &&
-                        $exprSwitch->tipo === $valCaso->tipo) {
-                        $encontrado = true;
-                        $casoEjecutar = $caso;
-                        break 2;
-                    }
-                }
-            }
-        }
-
-        if ($encontrado && $casoEjecutar !== null) {
-            foreach ($casoEjecutar->sentencia() as $sent) {
-                $resultado = $this->visit($sent);
-
-                if ($resultado !== null && $resultado->esBreak) {
-                    break;
-                }
-            }
-        } elseif ($default !== null) {
-            foreach ($default->sentencia() as $sent) {
-                $resultado = $this->visit($sent);
-
-                if ($resultado !== null && $resultado->esBreak) {
-                    break;
-                }
-            }
-        }
-
-        return Result::nulo();
     }
 
     public function visitSentenciaReturn($ctx): Result
@@ -946,43 +786,32 @@ class ExpressionVisitor extends BaseVisitor
         return $res;
     }
 
-    // ============================================================
-    // BLOQUES
-    // ============================================================
-
     public function visitBloque($ctx): Result
     {
-        // Permitir null si viene desde BaseVisitor
-        if ($ctx === null) {
-            return Result::nulo();
-        }
-
         $envAnterior = $this->env;
         $this->env = new Environment($envAnterior);
 
         $resultado = Result::nulo();
+        
+        foreach ($ctx->sentencia() as $sent) {
+            $visitor = new ExpressionVisitor(
+                $this->envGlobal,
+                $this->env,
+                $this->errores,
+                $this->ambitoActual
+            );
+            
+            $resultado = $visitor->visit($sent);
+            
+            $this->consola .= $visitor->obtenerConsola();
+            
+            $simbolos = $visitor->obtenerRegistroSimbolos();
+            foreach ($simbolos as $sym) {
+                // Registrar símbolos si es necesario
+            }
 
-        if (method_exists($ctx, 'sentencia')) {
-            foreach ($ctx->sentencia() as $sent) {
-                $visitor = new ExpressionVisitor(
-                    $this->envGlobal,
-                    $this->env,
-                    $this->errores,
-                    $this->ambitoActual
-                );
-
-                $resultado = $visitor->visit($sent);
-
-                $this->consola .= $visitor->obtenerConsola();
-
-                $simbolos = $visitor->obtenerRegistroSimbolos();
-                foreach ($simbolos as $sym) {
-                    $this->registroSimbolos[] = $sym;
-                }
-
-                if ($resultado !== null && ($resultado->esReturn || $resultado->esBreak || $resultado->esContinue)) {
-                    break;
-                }
+            if ($resultado !== null && ($resultado->esReturn || $resultado->esBreak || $resultado->esContinue)) {
+                break;
             }
         }
 
@@ -990,44 +819,16 @@ class ExpressionVisitor extends BaseVisitor
         return $resultado;
     }
 
-    // ============================================================
-    // HELPERS
-    // ============================================================
-
-    private function generarValorDefecto(string $tipo): mixed
-    {
-        // Eliminar punteros del análisis
-        while (strpos($tipo, '*') === 0) {
-            $tipo = substr($tipo, 1);
-        }
-
-        // Analizar dimensiones
-        $info = $this->obtenerDimensiones($tipo);
-        $dimensiones = $info['dimensiones'];
-        $tipoBase = $info['tipoBase'];
-
-        // Si hay dimensiones, crear arreglo multidimensional
-        if (!empty($dimensiones)) {
-            return $this->crearArregloMultidimensional($dimensiones, $tipoBase);
-        }
-
-        // Si no hay dimensiones, retornar valor por defecto del tipo base
-        return TiposSistema::valorDefecto($tipoBase);
-    }
-
     private function sonTiposCompatibles(string $tipoDest, string $tipoOrigen): bool
     {
-        // Mismo tipo
         if ($tipoDest === $tipoOrigen) {
             return true;
         }
 
-        // nil con cualquier tipo
         if ($tipoOrigen === Result::NIL) {
             return true;
         }
 
-        // No compatible
         return false;
     }
 }
