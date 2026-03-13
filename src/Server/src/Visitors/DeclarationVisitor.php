@@ -3,20 +3,19 @@
 namespace App\Visitors;
 
 use Context\{VarDeclContext, ConstDeclContext, DeclCortaContext};
-use App\Env\{Result, Symbol, TiposSistema};
+use App\Env\{Symbol, Result, TiposSistema};
 use App\Utils\ValueFormatter;
 
+/**
+ * Visitor para declaraciones (var, const, declCorta).
+ */
 class DeclarationVisitor extends BaseVisitor
 {
-    public function __construct(
-        \App\Env\Environment $envGlobal,
-        \App\Env\Environment $env,
-        \App\Env\ManejadorErrores $errores,
-        string $ambitoActual = 'global'
-    ) {
-        parent::__construct($envGlobal, $env, $errores, $ambitoActual);
-    }
-
+    /**
+     * var x int32 = 5
+     * var x, y int32
+     * var x, y int32 = 1, 2
+     */
     public function visitVarDecl(VarDeclContext $ctx): Result
     {
         $tipo  = $ctx->tipo()->getText();
@@ -26,6 +25,7 @@ class DeclarationVisitor extends BaseVisitor
         foreach ($ids as $i => $nodoId) {
             $nombre = $nodoId->getText();
 
+            // Verificar redeclaración en ámbito local
             if ($this->env->existeLocal($nombre)) {
                 $this->errores->agregar(
                     'Semántico',
@@ -36,6 +36,7 @@ class DeclarationVisitor extends BaseVisitor
                 continue;
             }
 
+            // Evaluar expresión o usar valor por defecto
             if (isset($exprs[$i])) {
                 $exprVisitor = new ExpressionVisitor(
                     $this->envGlobal,
@@ -43,27 +44,19 @@ class DeclarationVisitor extends BaseVisitor
                     $this->errores,
                     $this->ambitoActual
                 );
-                
                 $res   = $exprVisitor->visit($exprs[$i]);
-                
-                if ($res->tipo !== Result::NIL && $res->tipo !== $tipo) {
-                    $this->errores->agregar(
-                        'Semántico',
-                        "Incompatibilidad de tipos: no se puede asignar '{$res->tipo}' a '{$tipo}'.",
-                        $exprs[$i]->getStart()->getLine(),
-                        $exprs[$i]->getStart()->getCharPositionInLine()
-                    );
-                    continue;
-                }
-                
                 $valor = ValueFormatter::castear($res, $tipo);
+                // Propagar consola
+                $this->consola .= $exprVisitor->obtenerConsola();
             } else {
-                $valor = $this->generarValorDefecto($tipo);
+                $valor = TiposSistema::valorDefecto($tipo);
             }
 
+            // Crear símbolo y declarar en el entorno
             $sym = new Symbol($tipo, $valor, Symbol::CLASE_VARIABLE, 0, 0);
             $this->env->declarar($nombre, $sym);
 
+            // Registrar en la tabla central de símbolos
             $this->registrarSimbolo(
                 $nombre, $tipo, $valor, Symbol::CLASE_VARIABLE,
                 $nodoId->getSymbol()->getLine(),
@@ -74,11 +67,15 @@ class DeclarationVisitor extends BaseVisitor
         return Result::nulo();
     }
 
+    /**
+     * const PI float32 = 3.14
+     */
     public function visitConstDecl(ConstDeclContext $ctx): Result
     {
         $nombre = $ctx->ID()->getText();
         $tipo   = $ctx->tipo()->getText();
 
+        // Verificar redeclaración en ámbito local
         if ($this->env->existeLocal($nombre)) {
             $this->errores->agregar(
                 'Semántico',
@@ -89,20 +86,23 @@ class DeclarationVisitor extends BaseVisitor
             return Result::nulo();
         }
 
+        // Evaluar expresión
         $exprVisitor = new ExpressionVisitor(
             $this->envGlobal,
             $this->env,
             $this->errores,
             $this->ambitoActual
         );
-
         $res   = $exprVisitor->visit($ctx->expr());
         $valor = ValueFormatter::castear($res, $tipo);
+        $this->consola .= $exprVisitor->obtenerConsola();
 
+        // Crear símbolo constante
         $sym              = new Symbol($tipo, $valor, Symbol::CLASE_CONSTANTE, 0, 0);
         $sym->esConstante = true;
         $this->env->declarar($nombre, $sym);
 
+        // Registrar en la tabla central de símbolos
         $this->registrarSimbolo(
             $nombre, $tipo, $valor, Symbol::CLASE_CONSTANTE,
             $ctx->ID()->getSymbol()->getLine(),
@@ -112,11 +112,16 @@ class DeclarationVisitor extends BaseVisitor
         return Result::nulo();
     }
 
+    /**
+     * x := 5
+     * x, y := 1, 2
+     */
     public function visitDeclCorta(DeclCortaContext $ctx): Result
     {
         $ids   = $ctx->listaIds()->ID();
         $exprs = $ctx->listaExpr()->expr();
 
+        // Validar cantidad de expresiones vs identificadores
         if (count($ids) !== count($exprs)) {
             $this->errores->agregar(
                 'Semántico',
@@ -137,6 +142,7 @@ class DeclarationVisitor extends BaseVisitor
             $res    = $exprVisitor->visit($exprs[$i]);
 
             if ($this->env->existeLocal($nombre)) {
+                // Go permite reasignación si al menos una variable es nueva
                 try {
                     $sym = $this->env->obtener($nombre);
                     if ($sym->esConstante) {
@@ -148,15 +154,18 @@ class DeclarationVisitor extends BaseVisitor
                         );
                         continue;
                     }
+                    // Reasignar con tipo actual
                     $sym->valor = ValueFormatter::castear($res, $sym->tipo);
                     $this->registrarSimbolo($nombre, $sym->tipo, $sym->valor, $sym->clase);
                 } catch (\RuntimeException $e) {
                     $this->errores->agregar('Semántico', $e->getMessage());
                 }
             } else {
+                // Nueva variable — inferir tipo de la expresión
                 $sym = new Symbol($res->tipo, $res->valor, Symbol::CLASE_VARIABLE, 0, 0);
                 $this->env->declarar($nombre, $sym);
 
+                // Registrar en la tabla central de símbolos
                 $this->registrarSimbolo(
                     $nombre, $res->tipo, $res->valor, Symbol::CLASE_VARIABLE,
                     $nodoId->getSymbol()->getLine(),
@@ -165,29 +174,7 @@ class DeclarationVisitor extends BaseVisitor
             }
         }
 
+        $this->consola .= $exprVisitor->obtenerConsola();
         return Result::nulo();
-    }
-
-    private function generarValorDefecto(string $tipo): mixed
-    {
-        if (strpos($tipo, '[') !== false) {
-            preg_match('/\[(\d+)\]/', $tipo, $matches);
-            if (isset($matches[1])) {
-                $tamaño = (int)$matches[1];
-                $tipoElemento = str_replace($matches[0], '', $tipo);
-                
-                $valoresDefecto = array_fill(0, $tamaño, TiposSistema::valorDefecto($tipoElemento));
-                
-                if (strpos($tipoElemento, '[') !== false) {
-                    foreach ($valoresDefecto as $i => $val) {
-                        $valoresDefecto[$i] = $this->generarValorDefecto($tipoElemento);
-                    }
-                }
-                
-                return $valoresDefecto;
-            }
-        }
-        
-        return TiposSistema::valorDefecto($tipo);
     }
 }
