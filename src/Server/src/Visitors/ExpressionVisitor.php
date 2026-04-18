@@ -14,7 +14,7 @@ use Context\{ExpressionVisitor as CtxExprVisitor, SentenciaExprContext,
              ExprIdContext, ExprLiteralContext, ExprArregloLiteralContext, ArregloLiteralContext, ExprReferenciaContext,
              ExprDerefContext, LiteralEnteroContext, LiteralFlotanteContext,
              LiteralBoolContext, LiteralRuneContext, LiteralStringContext,
-             AsignacionContext, AsignacionCompuestaContext, IncDecContext,};
+             AsignacionContext, AsignacionCompuestaContext, IncDecContext,ExprInRangoContext, ExprNotInRangoContext,};
 
 use App\Env\{Result, Symbol, TiposSistema, Environment};
 use App\Expressions\BinaryOperator;
@@ -1294,4 +1294,24 @@ private function builtinSubstr(array $args): Result
         $val = $this->visit($ctx->expr());
         return new Result(Result::STRING, (string)$val->valor);
     }
+
+    // CALIFICACION
+    public function visitExprInRango($ctx): Result {
+        $val = $this->visit($ctx->expr(0));
+        $desde = $this->visit($ctx->expr(1));
+        $hasta = $this->visit($ctx->expr(2));
+
+        $resultado = $val->valor >= $desde->valor && $val->valor <= $hasta->valor;
+        return new Result(Result::BOOL, $resultado);
+    }
+
+    public function visitExprNotInRango($ctx): Result {
+        $val = $this->visit($ctx->expr(0));
+        $desde = $this->visit($ctx->expr(1));
+        $hasta = $this->visit($ctx->expr(2));
+        $resultado = ((float)$val->valor < (float)$desde->valor) || ((float)$val->valor > (float)$hasta->valor);
+        return new Result(Result::BOOL, $resultado);
+    }
+// Grabacion: https://drive.google.com/file/d/1ThKW75G84vDjtlQxLLtAiaeJGFzIoXKL/view?usp=sharing
+
 }

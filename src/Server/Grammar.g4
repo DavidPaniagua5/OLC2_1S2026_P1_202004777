@@ -211,6 +211,10 @@ expr
     | '&' ID                                                    # ExprReferencia
     | '*' ID                                                    # ExprDeref
 
+    // IN-RANGE
+    | expr IN '[' expr DOTDOT expr ']'                     #ExprInRango
+    | expr NOT_IN IN '[' expr DOTDOT expr ']'                #ExprNotInRango
+
     // Primarios (sin operandos izquierdos)
     | '(' expr ')'                                              # ExprAgrupada
     | RUNE_TYPE   '(' expr ')'   # ExprCastRune
@@ -222,6 +226,7 @@ expr
     | STRING_TYPE '(' expr ')'   # ExprCastString
 
     | FMT_PRINTLN '(' listaExpr? ')'                            # ExprFmtPrintln
+
 
     | ID '(' listaExpr? ')'                                     # ExprLlamada
 
@@ -278,6 +283,9 @@ RETURN   : 'return'   ;
 BREAK    : 'break'    ;
 CONTINUE : 'continue' ;
 NIL      : 'nil'      ;
+IN       : 'in'       ;
+NOT_IN   : 'not'      ;
+DOTDOT   : '..'       ;
 
 // ============================================================
 // OPERADORES
