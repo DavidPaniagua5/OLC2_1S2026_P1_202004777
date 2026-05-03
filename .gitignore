@@ -3,6 +3,7 @@ vendor
 # Composer
 /vendor/
 **/vendor/
+Salidas/
 
 # ANTLR vscode extension
 /.antlr/
