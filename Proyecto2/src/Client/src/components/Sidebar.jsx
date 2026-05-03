@@ -44,15 +44,18 @@ export default function Sidebar({ onClear,
           id={id}
           onClick={() => {
             if(id === 'Abrir'){
-              fileInputRef.current.click();   
+              fileInputRef.current.click();
+              window.Editor.focus();   
             }else if(id === 'Nuevo'){
               onClear(fileInputRef);
+              window.Editor.focus();
             }else if(id === 'Limpiar'){
               onClearConsola();
             }else if(id === 'Guardar'){
               onSave();  
             }else if(id === 'Ejecutar'){
-              onRun()
+              onRun();
+              window.DiConsola.focus();
             }else if(id ==='Consola'){
               onDownloadConsola(); 
             }else if(id ==='Tabla de simbolos'){

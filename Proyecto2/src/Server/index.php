@@ -28,6 +28,29 @@ $respuesta = [
 ];
 
 try {
+$data = json_decode(file_get_contents('php://input'), true);
+$action = $data['action'] ?? 'compile'; // Por defecto compilar
+
+if ($action === 'execute_arm64') {
+    $armCode = $data['armCode'] ?? '';
+    $path = "/mnt/c/Users/HP/Desktop/ANDRES/2026/S1/Compi/a/OLC2_1S2026_P1_202004777/Proyecto2/Salidas/";
+    $fileName = "programa_arm64.s";
+    
+    // 1. Guardar el archivo físicamente
+    file_put_contents($path . $fileName, $armCode);
+    
+    // 2. Ejecutar el script .sh
+    // Cambiamos al directorio y ejecutamos el script pasando el nombre del archivo
+    $command = "cd $path && ./run_arm64.sh $fileName 2>&1";
+    $output = shell_exec($command);
+    
+    echo json_encode([
+        'success' => true,
+        'ejecucion' => $output ?: "Programa ejecutado (sin salida de texto)."
+    ]);
+    exit;
+}
+
     $data  = json_decode(file_get_contents('php://input'), true);
     $input = trim($data['expression'] ?? '');
 
@@ -79,7 +102,7 @@ try {
     $respuesta['simbolos'] = $interprete->tablaSimbolos();
 
     // 2. Generación de código ARM64
-    if (!$errores->tieneErrores()) {
+    // if (!$errores->tieneErrores()) {
         $codegen   = new CodeGenerator($errores);
         $codigoArm = $codegen->visitPrograma($tree);
         $respuesta['arm64'] = $codigoArm;
@@ -87,10 +110,12 @@ try {
     } else {
         $respuesta['success'] = false;
     }
-    }
+// }
     $respuesta['errors'] = $errores->comoArreglo();
     echo json_encode($respuesta);
 
+
+    
 } catch (\Throwable $e) {
     $respuesta['errors'][] = [
         'numero'      => 1,

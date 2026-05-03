@@ -4,6 +4,7 @@ vendor
 /vendor/
 **/vendor/
 Salidas/
+ArchivosEntrada/
 
 # ANTLR vscode extension
 /.antlr/

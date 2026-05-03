@@ -23,10 +23,10 @@ class BinaryOperator
     public function aplicar(string $op, Result $izq, Result $der): Result
     {
         // Operación con nil → siempre error y nil
-        if ($izq->tipo === Result::NIL || $der->tipo === Result::NIL) {
-            $this->errores->agregar('Semántico', "No se puede operar con nil.");
-            return Result::nulo();
-        }
+        // if ($izq->tipo === Result::NIL || $der->tipo === Result::NIL) {
+        //     $this->errores->agregar('Semántico', "No se puede operar con nil.");
+        //     return Result::nulo();
+        // }
 
         $tipoResultado = TiposSistema::resultado($op, $izq->tipo, $der->tipo);
 

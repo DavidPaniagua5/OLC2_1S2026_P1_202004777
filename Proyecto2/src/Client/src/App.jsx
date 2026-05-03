@@ -9,6 +9,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import { useState } from 'react';
+import { useRef } from "react";
 import "./App.css";
 
 export default function App() {
@@ -18,14 +19,14 @@ export default function App() {
   const [consola, setConsola] = useState("");
   const [errores, setErrores] = useState([]);
   const [simbolos, setSimbolos] = useState([]);
-
-
+  const [ejecucion, setEjecucion] = useState("");
+  const salidaRef = useRef(null);
 
 // Función para manejar la carga de un archivo
   const handleLoadFile = (event) => {
     const file = event.target.files[0];
     if (file) {
-
+      handleClearConsola();
       window.sessionStorage.setItem('fileName', file.name);
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -116,6 +117,7 @@ const handleSave = async () => {
         setErrores([]);
         setSimbolos([]);
         setAstDot("");
+        setEjecucion("");
       
     }else{
       setCode('');
@@ -123,6 +125,7 @@ const handleSave = async () => {
       setErrores([]);
       setSimbolos([]);
       setAstDot("");
+      setEjecucion("");
     }
   }else{
       setCode('');
@@ -130,6 +133,7 @@ const handleSave = async () => {
       setErrores([]);
       setSimbolos([]);
       setAstDot("");
+      setEjecucion("");
     }
     if (fileInputRef && fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -142,29 +146,22 @@ const handleSave = async () => {
       setErrores([]);
       setSimbolos([]);
       setAstDot("");
-      const result = await Swal.fire({
-        title: 'Éxito',
-        text: "Limpieza realizada con éxito.",
-        icon: 'success',
-        timer:1500
-        });
+      setEjecucion("");
   }
 
   const descargarErrores = () => {
   const doc = new jsPDF();
 
-  // 🔹 Título
+  //Título
   doc.setFontSize(16);
   doc.text("Errores durante la ejecución", 14, 15);
 
-  // 🔹 Subtítulo opcional
   doc.setFontSize(10);
   doc.text(`Total de errores: ${errores.length}`, 14, 22);
 
   if (errores.length === 0) {
     doc.text("No se encontraron errores.", 14, 30);
   } else {
-    // 🔹 Preparar datos para la tabla
     const columnas = ["#", "Tipo", "Descripción", "Línea", "Columna"];
 
     const filas = errores.map((err, i) => [
@@ -175,7 +172,6 @@ const handleSave = async () => {
       err.columna || "-"
     ]);
 
-    // 🔹 Tabla bonita
     autoTable(doc, {
       startY: 30,
       head: [columnas],
@@ -184,7 +180,7 @@ const handleSave = async () => {
         fontSize: 9
       },
       headStyles: {
-        fillColor: [22, 160, 133] // verde bonito
+        fillColor: [22, 160, 133]
       },
       alternateRowStyles: {
         fillColor: [240, 240, 240]
@@ -198,7 +194,7 @@ const handleSave = async () => {
 const descargarSimbolos = () => {
   const doc = new jsPDF();
 
-  // 🔹 Título
+
   doc.setFontSize(16);
   doc.text("Tabla de Símbolos", 14, 15);
 
@@ -209,7 +205,6 @@ const descargarSimbolos = () => {
     doc.text("No se encontraron símbolos.", 14, 30);
   } else {
 
-    // ⚠️ Ajusta estos campos según tu backend
     const columnas = ["#", "Identificador", "Tipo", "Valor", "Ámbito"];
 
     const filas = simbolos.map((sim, i) => [
@@ -255,6 +250,45 @@ const descargarConsola = () => {
   URL.revokeObjectURL(url);
 };
 
+const handleRunArm64 = async () => {
+    if (!consola.trim()) return;
+
+    let codigoLimpio = consola
+      .replace(/\[\d{2}:\d{2}:\d{2}\]--- El código ensamblador ARM64 completo generado ---/g, "")
+      .trim();
+
+    setEjecucion("Compilando y ejecutando en el servidor...");
+
+    try {
+        const response = await fetch('http://localhost:8000/index.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'execute_arm64',
+                armCode: codigoLimpio 
+            }),
+        });
+
+        const data = await response.json();
+
+        if (data.ejecucion) {
+            setEjecucion(""); 
+            setEjecucion(data.ejecucion);
+
+              setTimeout(() => {
+                salidaRef.current?.focus();
+                salidaRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, 0);
+
+        } else {
+            setEjecucion("Error en la ejecución...");
+        }
+
+    } catch (error) {
+        setEjecucion("Error de conexión con el servidor PHP.");
+    }
+};
+
   const handleOnRun = async () => {
     if (!code.trim()) {
       const nuevoError = {
@@ -264,7 +298,7 @@ const descargarConsola = () => {
       setErrores([nuevoError]);
       return
     }
-
+    handleClearConsola();
     setConsola("Ejecutando...");
     try {
         const response = await fetch('http://localhost:8000/index.php', {
@@ -341,10 +375,15 @@ const descargarConsola = () => {
         <Editor code={code} setCode={setCode} />
       </div>
 
-      <div className="seccion" id ="DiConsola" tabIndex="-1">
-        <Consola texto={consola} />
+      <div className="seccion" id ="DiConsola">
+        <Consola 
+          texto={consola} 
+          onRunArm64={handleRunArm64} 
+          salidaEjecucion={ejecucion}
+          salidaRef={salidaRef}
+        />
       </div>
-
+      
       <div className="seccion" id ="DiTabla" tabIndex="-1">
         <Simbolos data={simbolos} />
       </div>
