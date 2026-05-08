@@ -215,6 +215,25 @@ private function registrarFuncion(\Context\FuncDeclContext $ctx): void
     $this->funcRetTipos[$nombre] = $tipoRet;
 }
 
+/*
+-----------------------------------------------------------------------------
+CALIFICACION
+-----------------------------------------------------------------------------
+*/
+public function visitExprXor(\Context\ExprXorContext $ctx):string{
+    $this->visit($ctx->expr(0));
+    $this->pushReg('x0');
+    
+    $this->visit($ctx->expr(1));
+    $this->text[] = '   mov x1,x0';
+    $this->popReg('x0');
+
+    $this->text[] = '   eor x0, x0, x1';
+    $this->lastType = 'bool';
+    return 'x0';
+}
+
+
 public function visitFuncDecl(\Context\FuncDeclContext $ctx): void
 {
     $nombre = $ctx->ID()->getText();

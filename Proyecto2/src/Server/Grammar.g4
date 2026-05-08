@@ -192,6 +192,8 @@ expr
     // AND
     | expr AND expr                                             # ExprAnd
 
+    | expr XOR expr                      #ExprXor
+
     // Igualdad
     | expr op=(EQ | NEQ) expr                                   # ExprIgualdad
 
@@ -227,9 +229,8 @@ expr
 
     | FMT_PRINTLN '(' listaExpr? ')'                            # ExprFmtPrintln
 
-
     | ID '(' listaExpr? ')'                                     # ExprLlamada
-
+    
     | arregloLiteral                                            # ExprArregloLiteral
 
     | ID ('[' expr ']')+                                        # ExprIndiceArreglo
@@ -305,6 +306,7 @@ LE           : '<=' ;
 GE           : '>=' ;
 LT           : '<'  ;
 GT           : '>'  ;
+XOR          : '^^' ;
 
 // ============================================================
 // TOKENS LITERALES

@@ -33,7 +33,7 @@ $action = $data['action'] ?? 'compile'; // Por defecto compilar
 
 if ($action === 'execute_arm64') {
     $armCode = $data['armCode'] ?? '';
-    $path = "/mnt/c/Users/HP/Desktop/ANDRES/2026/S1/Compi/a/OLC2_1S2026_P1_202004777/Proyecto2/Salidas/";
+    $path = "/home/paniagua/Documentos/Andres/2026/Compi/Lab/OLC2_1S2026_P1_202004777/Proyecto2/Salidas/";
     $fileName = "programa_arm64.s";
     
     // 1. Guardar el archivo físicamente

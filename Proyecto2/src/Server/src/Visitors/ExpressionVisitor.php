@@ -14,12 +14,13 @@ use Context\{ExpressionVisitor as CtxExprVisitor, SentenciaExprContext,
              ExprIdContext, ExprLiteralContext, ExprArregloLiteralContext, ArregloLiteralContext, ExprReferenciaContext,
              ExprDerefContext, LiteralEnteroContext, LiteralFlotanteContext,
              LiteralBoolContext, LiteralRuneContext, LiteralStringContext,
-             AsignacionContext, AsignacionCompuestaContext, IncDecContext,ExprInRangoContext, ExprNotInRangoContext,};
+             AsignacionContext, AsignacionCompuestaContext, IncDecContext,ExprInRangoContext, ExprNotInRangoContext,ExprComposicionContext,};
 
 use App\Env\{Result, Symbol, TiposSistema, Environment};
 use App\Expressions\BinaryOperator;
 use App\Utils\ValueFormatter;
 use App\BuiltIn\BuiltInRegistry;
+use Override;
 
 class ExpressionVisitor extends BaseVisitor
 {
@@ -48,6 +49,8 @@ class ExpressionVisitor extends BaseVisitor
     // DECLARACIONES
     // ==============================================================
 
+#[Override]
+	
     public function visitVarDecl(VarDeclContext $ctx): Result
     {
         $tipo = $ctx->tipo() !== null ? $ctx->tipo()->getText() : null;
